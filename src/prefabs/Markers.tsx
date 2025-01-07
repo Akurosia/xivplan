@@ -1,5 +1,7 @@
 import { ShapeConfig } from 'konva/lib/Shape';
+import { EllipseConfig } from 'konva/lib/shapes/Ellipse';
 import * as React from 'react';
+import { useMemo } from 'react';
 import { Ellipse, Group, Image, Rect } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../DropHandler';
 import { ALIGN_TO_PIXEL } from '../coord';
@@ -105,6 +107,22 @@ const EllipseOutline: React.FC<OutlineProps> = ({
     showHighlight,
     strokeProps,
 }) => {
+    // Making the object always slightly elliptical works around a bug on
+    // Firefox where it draws a very thick arc instead of dashes.
+    // https://github.com/konvajs/konva/issues/1864
+    const isGecko = useMemo(() => navigator.userAgent.includes('Gecko'), []);
+
+    if (isGecko) {
+        const geckoHack = 1.001;
+
+        if (width === height) {
+            width *= geckoHack;
+        }
+        if (highlightWidth === highlightHeight) {
+            highlightWidth *= geckoHack;
+        }
+    }
+
     return (
         <>
             {showHighlight && (
@@ -161,18 +179,22 @@ const MarkerRenderer: React.FC<RendererProps<MarkerObject>> = ({ object }) => {
     const iconX = (object.width - iconWidth) / 2;
     const iconY = (object.height - iconHeight) / 2;
 
+    const strokeWidth = 1;
+
     const dashSize = getDashSize(object);
-    const strokeProps = {
+    const strokeProps: Partial<EllipseConfig> = {
         stroke: object.color,
-        strokeWidth: 1,
+        strokeWidth,
         shadowColor: object.color,
-        shadowBlur: 2,
+        shadowBlur: 1,
         dash: [dashSize, dashSize],
     };
 
-    const highlightOffset = strokeProps.strokeWidth * 4;
+    const highlightOffset = strokeWidth * 4;
     const highlightWidth = object.width + highlightOffset;
     const highlightHeight = object.height + highlightOffset;
+
+    console.log(strokeProps);
 
     return (
         <ResizeableObjectContainer object={object} transformerProps={{ centeredScaling: true }}>
