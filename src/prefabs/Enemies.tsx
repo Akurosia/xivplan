@@ -2,7 +2,7 @@ import Konva from 'konva';
 import { ShapeConfig } from 'konva/lib/Shape';
 import * as React from 'react';
 import { RefObject, useRef } from 'react';
-import { Arc, Circle, Group, Path, Text } from 'react-konva';
+import { Arc, Circle, Path, Text } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../DropHandler';
 import { DetailsItem } from '../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../panel/ListComponentRegistry';
@@ -16,10 +16,11 @@ import {
     useSceneTheme,
 } from '../render/SceneTheme';
 import { LayerName } from '../render/layers';
-import { EnemyObject, ObjectType } from '../scene';
+import { EnemyObject, EnemyRingStyle, ObjectType } from '../scene';
 import { useKonvaCache } from '../useKonvaCache';
 import { usePanelDrag } from '../usePanelDrag';
 import { makeDisplayName } from '../util';
+import { HideGroup } from './HideGroup';
 import { PrefabIcon } from './PrefabIcon';
 import { RadiusObjectContainer } from './RadiusObjectContainer';
 import { useShowHighlight } from './highlight';
@@ -58,7 +59,7 @@ function makeIcon(name: string, icon: string, radius: number, hasDirection = tru
                             icon: iconUrl,
                             radius: radius,
                             rotation: 0,
-                            omniDirection: !hasDirection,
+                            ring: hasDirection ? EnemyRingStyle.Directional : EnemyRingStyle.NoDirection,
                         },
                         offset: getDragOffset(e),
                     });
@@ -128,6 +129,10 @@ function getInnerRadius(radius: number) {
     return Math.min(radius - 4, radius * INNER_RADIUS_RATIO);
 }
 
+function getOuterRadius(radius: number, strokeWidth: number) {
+    return radius - strokeWidth / 2;
+}
+
 function getShapeProps(color: string, radius: number, strokeRatio: number, minStroke: number) {
     const strokeWidth = Math.max(minStroke, radius * strokeRatio);
     const shadowBlur = Math.max(SHADOW_BLUR_MIN, radius * SHADOW_BLUR_RATIO);
@@ -142,18 +147,19 @@ function getShapeProps(color: string, radius: number, strokeRatio: number, minSt
 }
 
 const CircleRing: React.FC<RingProps> = ({ radius, color, isSelected, opacity, ...props }) => {
-    const innerRadius = getInnerRadius(radius);
     const outerProps = getShapeProps(color, radius, OUTER_STROKE_RATIO, OUTER_STROKE_MIN);
     const innerProps = getShapeProps(color, radius, INNER_STROKE_RATIO, INNER_STROKE_MIN);
+    const innerRadius = getInnerRadius(radius);
+    const outerRadius = getOuterRadius(radius, outerProps.strokeWidth);
 
     return (
         <>
-            {isSelected && <Circle radius={radius + outerProps.strokeWidth / 2} {...SELECTED_PROPS} />}
+            {isSelected && <Circle radius={radius} {...SELECTED_PROPS} />}
 
-            <Group opacity={opacity} {...props}>
-                <Circle {...outerProps} radius={radius} />
+            <HideGroup opacity={opacity} {...props}>
+                <Circle {...outerProps} radius={outerRadius} />
                 <Circle {...innerProps} radius={innerRadius} />
-            </Group>
+            </HideGroup>
         </>
     );
 };
@@ -172,9 +178,10 @@ const DirectionalRing: React.FC<DirectionalRingProps> = ({
     groupRef,
     ...props
 }) => {
-    const innerRadius = getInnerRadius(radius);
     const outerProps = getShapeProps(color, radius, OUTER_STROKE_RATIO, OUTER_STROKE_MIN);
     const innerProps = getShapeProps(color, radius, INNER_STROKE_RATIO, INNER_STROKE_MIN);
+    const innerRadius = getInnerRadius(radius);
+    const outerRadius = getOuterRadius(radius, outerProps.strokeWidth);
     const arrowScale = radius / 32;
 
     // Cache so overlapping shapes with opacity appear as one object.
@@ -184,14 +191,14 @@ const DirectionalRing: React.FC<DirectionalRingProps> = ({
         <>
             {isSelected && <Circle radius={radius + outerProps.strokeWidth / 2} {...SELECTED_PROPS} />}
 
-            <Group opacity={opacity} ref={groupRef} rotation={rotation} {...props}>
+            <HideGroup opacity={opacity} ref={groupRef} rotation={rotation} {...props}>
                 <Circle radius={radius} fill="transparent" />
                 <Arc
                     {...outerProps}
                     rotation={RING_ROTATION}
                     angle={RING_ANGLE}
-                    innerRadius={radius}
-                    outerRadius={radius}
+                    innerRadius={outerRadius}
+                    outerRadius={outerRadius}
                 />
                 <Arc
                     {...innerProps}
@@ -201,13 +208,53 @@ const DirectionalRing: React.FC<DirectionalRingProps> = ({
                     outerRadius={innerRadius}
                 />
                 <Path
-                    data="M0-42c-2 2-4 7-4 10c4 0 4 0 8 0c0-3-2-8-4-10"
+                    data="M0-41c-2 2-4 7-4 10 4 0 4 0 8 0 0-3-2-8-4-10"
                     scaleX={arrowScale}
                     scaleY={arrowScale}
                     strokeEnabled={false}
                     fill={color}
                 />
-            </Group>
+            </HideGroup>
+        </>
+    );
+};
+
+const OmnidirectionalRing: React.FC<DirectionalRingProps> = ({
+    radius,
+    color,
+    opacity,
+    rotation,
+    isSelected,
+    groupRef,
+    ...props
+}) => {
+    const outerProps = getShapeProps(color, radius, OUTER_STROKE_RATIO, OUTER_STROKE_MIN);
+    const innerProps = getShapeProps(color, radius, INNER_STROKE_RATIO, INNER_STROKE_MIN);
+    const innerRadius = getInnerRadius(radius);
+    const outerRadius = getOuterRadius(radius, outerProps.strokeWidth);
+    const arrowScale = radius / 42;
+
+    // Cache so overlapping shapes with opacity appear as one object.
+    useKonvaCache(groupRef, [radius, color]);
+
+    return (
+        <>
+            {isSelected && <Circle radius={radius} {...SELECTED_PROPS} />}
+
+            <HideGroup opacity={opacity} ref={groupRef} rotation={rotation} {...props}>
+                <Circle radius={radius} fill="transparent" />
+
+                <Circle {...outerProps} radius={outerRadius} />
+                <Circle {...innerProps} radius={innerRadius} />
+
+                <Path
+                    data="M0-40c-2 2-4 7-4 10l4-2L4-30c0-3-2-8-4-10"
+                    scaleX={arrowScale}
+                    scaleY={arrowScale}
+                    strokeEnabled={false}
+                    fill={color}
+                />
+            </HideGroup>
         </>
     );
 };
@@ -219,24 +266,26 @@ interface EnemyRendererProps extends RendererProps<EnemyObject> {
     isDragging?: boolean;
 }
 
-const EnemyRenderer: React.FC<EnemyRendererProps> = ({ object, radius, rotation, groupRef, isDragging }) => {
-    const showHighlight = useShowHighlight(object);
-    const theme = useSceneTheme();
-
-    return (
-        <>
-            {isDragging && <Circle radius={CENTER_DOT_RADIUS} fill={object.color} />}
-
-            <EnemyLabel name={object.name} radius={radius} theme={theme.enemy} color={object.color} />
-
-            {object.omniDirection ? (
+function renderRing(
+    object: EnemyObject,
+    radius: number,
+    rotation: number,
+    groupRef: RefObject<Konva.Group>,
+    showHighlight: boolean,
+) {
+    switch (object.ring) {
+        case EnemyRingStyle.NoDirection:
+            return (
                 <CircleRing
                     radius={radius}
                     color={object.color}
                     opacity={object.opacity / 100}
                     isSelected={showHighlight}
                 />
-            ) : (
+            );
+
+        case EnemyRingStyle.Directional:
+            return (
                 <DirectionalRing
                     radius={radius}
                     rotation={rotation}
@@ -245,7 +294,35 @@ const EnemyRenderer: React.FC<EnemyRendererProps> = ({ object, radius, rotation,
                     isSelected={showHighlight}
                     groupRef={groupRef}
                 />
-            )}
+            );
+
+        case EnemyRingStyle.Omnidirectional:
+            return (
+                <OmnidirectionalRing
+                    radius={radius}
+                    rotation={rotation}
+                    color={object.color}
+                    opacity={object.opacity / 100}
+                    isSelected={showHighlight}
+                    groupRef={groupRef}
+                />
+            );
+    }
+}
+
+const EnemyRenderer: React.FC<EnemyRendererProps> = ({ object, radius, rotation, groupRef, isDragging }) => {
+    const showHighlight = useShowHighlight(object);
+    const theme = useSceneTheme();
+
+    return (
+        <>
+            <HideGroup>
+                {isDragging && <Circle radius={CENTER_DOT_RADIUS} fill={object.color} />}
+
+                <EnemyLabel name={object.name} radius={radius} theme={theme.enemy} color={object.color} />
+            </HideGroup>
+
+            {renderRing(object, radius, rotation, groupRef, showHighlight)}
         </>
     );
 };
@@ -282,7 +359,7 @@ const EnemyDetails: React.FC<ListComponentProps<EnemyObject>> = ({ object, ...pr
 
 registerListComponent<EnemyObject>(ObjectType.Enemy, EnemyDetails);
 
-export const EnemyCircle = makeIcon('Generic enemy', 'enemy_circle.png', SIZE_SMALL, false);
+export const EnemyCircle = makeIcon('Enemy circle', 'enemy_circle.png', SIZE_SMALL, false);
 export const EnemySmall = makeIcon('Small enemy', 'enemy_small.png', SIZE_SMALL);
 export const EnemyMedium = makeIcon('Medium enemy', 'enemy_medium.png', SIZE_MEDIUM);
 export const EnemyLarge = makeIcon('Large enemy', 'enemy_large.png', SIZE_LARGE);

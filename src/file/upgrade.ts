@@ -1,10 +1,18 @@
 import { Vector2d } from 'konva/lib/types';
-import { DEFAULT_ENEMY_OPACITY } from '../render/SceneTheme';
+import {
+    DEFAULT_ENEMY_OPACITY,
+    DEFAULT_IMAGE_OPACITY,
+    DEFAULT_MARKER_OPACITY,
+    DEFAULT_PARTY_OPACITY,
+} from '../render/SceneTheme';
 import {
     DrawObject,
     EnemyObject,
+    EnemyRingStyle,
     ExaflareZone,
     ImageObject,
+    MarkerObject,
+    PartyObject,
     Scene,
     SceneObject,
     SceneStep,
@@ -12,6 +20,8 @@ import {
     isEnemy,
     isExaflareZone,
     isImageObject,
+    isMarker,
+    isParty,
 } from '../scene';
 
 export function upgradeScene(scene: Scene): Scene {
@@ -33,6 +43,10 @@ function upgradeObject(object: SceneObject): SceneObject {
         object = upgradeEnemy(object);
     }
 
+    if (isParty(object)) {
+        object = upgradeParty(object);
+    }
+
     if (isDrawObject(object)) {
         object = upgradeDrawObject(object);
     }
@@ -45,16 +59,33 @@ function upgradeObject(object: SceneObject): SceneObject {
         object = upgradeExaflareZone(object);
     }
 
+    if (isMarker(object)) {
+        object = upgradeMarker(object);
+    }
+
     return object;
+}
+
+function getRingStyle<T extends EnemyObject>(object: T): EnemyRingStyle {
+    if (object.rotation === undefined) {
+        return EnemyRingStyle.NoDirection;
+    }
+
+    if ('omniDirection' in object && typeof object.omniDirection === 'boolean') {
+        return object.omniDirection ? EnemyRingStyle.NoDirection : EnemyRingStyle.Directional;
+    }
+
+    return EnemyRingStyle.Directional;
 }
 
 function upgradeEnemy<T extends EnemyObject>(object: T): T {
     // enemy was changed from { rotation?: number }
-    // to { rotation: number, directional: boolean, opacity: number }
+    // to { rotation: number, omniDirection: boolean, opacity: number }, then
+    // to { rotation: number, ring: EnemyRingStyle, opacity: number }
     return {
         ...object,
         rotation: object.rotation ?? 0,
-        omniDirection: object.omniDirection ?? object.rotation === undefined,
+        ring: getRingStyle(object),
         opacity: object.opacity ?? DEFAULT_ENEMY_OPACITY,
     };
 }
@@ -87,11 +118,29 @@ function upgradeImageObject<T extends ImageObject>(object: T): T {
         return `https://beta.xivapi.com/api/1/asset/ui/icon/${folder}/${name}.tex?format=png`;
     });
 
-    return { ...object, image };
+    return {
+        ...object,
+        image,
+        opacity: object.opacity ?? DEFAULT_IMAGE_OPACITY,
+    };
 }
 
 const LEGACY_SPACING = 60;
 
 function upgradeExaflareZone(object: ExaflareZone): ExaflareZone {
     return { ...object, spacing: object.spacing ?? LEGACY_SPACING };
+}
+
+function upgradeMarker(object: MarkerObject): MarkerObject {
+    return {
+        ...object,
+        opacity: object.opacity ?? DEFAULT_MARKER_OPACITY,
+    };
+}
+
+function upgradeParty(object: PartyObject): PartyObject {
+    return {
+        ...object,
+        opacity: object.opacity ?? DEFAULT_PARTY_OPACITY,
+    };
 }
