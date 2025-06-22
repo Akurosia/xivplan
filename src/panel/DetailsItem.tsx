@@ -1,8 +1,15 @@
-import { Button, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
-import { bundleIcon, DismissFilled, DismissRegular, EyeOffRegular, EyeRegular } from '@fluentui/react-icons';
-import React, { ReactNode, useCallback, useMemo } from 'react';
+import { Button, makeStyles, mergeClasses, tokens, typographyStyles } from '@fluentui/react-components';
+import {
+    bundleIcon,
+    DismissFilled,
+    DismissRegular,
+    EyeFilled,
+    EyeOffFilled,
+    EyeOffRegular,
+    EyeRegular,
+} from '@fluentui/react-icons';
+import React, { ReactNode, useCallback } from 'react';
 import { useScene } from '../SceneProvider';
-import { getRecolorFilter } from '../color';
 import { PrefabIcon } from '../prefabs/PrefabIcon';
 import { SceneObject } from '../scene';
 import { setOrOmit } from '../util';
@@ -11,12 +18,11 @@ import { detailsItemClassNames } from './detailsItemStyles';
 export interface DetailsItemProps {
     object: SceneObject;
     icon?: string | ReactNode;
-    color?: string;
-    filter?: string;
     name: string;
     children?: ReactNode;
     isNested?: boolean;
     isDragging?: boolean;
+    isSelected?: boolean;
 }
 
 // TODO: only show hide button if hidden or hovered/selected
@@ -25,25 +31,29 @@ export const DetailsItem: React.FC<DetailsItemProps> = ({
     object,
     icon,
     name,
-    color,
-    filter,
     isNested,
     isDragging,
+    isSelected,
     children,
 }) => {
     const classes = useStyles();
-    const iconFilter = useMemo(() => filter ?? (color ? getRecolorFilter(color) : undefined), [color, filter]);
 
     const size = isNested ? 20 : undefined;
 
     return (
-        <div className={classes.wrapper}>
-            <div>{icon && <PrefabIcon icon={icon} name={name} filter={iconFilter} width={size} height={size} />}</div>
+        <div className={mergeClasses(classes.wrapper, isNested && classes.nested)}>
+            <div>{icon && <PrefabIcon icon={icon} name={name} width={size} height={size} />}</div>
             {children ? children : <div className={classes.name}>{name}</div>}
             {!isNested && (
                 <div className={classes.buttons}>
-                    <DetailsItemHideButton object={object} className={mergeClasses(isDragging && classes.visible)} />
-                    <DetailsItemDeleteButton object={object} />
+                    <DetailsItemHideButton
+                        object={object}
+                        className={mergeClasses(isSelected && classes.selectedButton, isDragging && classes.visible)}
+                    />
+                    <DetailsItemDeleteButton
+                        object={object}
+                        className={mergeClasses(isSelected && classes.selectedButton)}
+                    />
                 </div>
             )}
         </div>
@@ -54,6 +64,9 @@ interface DetailsItemHideButtonProps {
     object: SceneObject;
     className?: string;
 }
+
+const EyeOffIcon = bundleIcon(EyeOffFilled, EyeOffRegular);
+const EyeIcon = bundleIcon(EyeFilled, EyeRegular);
 
 const DetailsItemHideButton: React.FC<DetailsItemHideButtonProps> = ({ object, className }) => {
     const classes = useStyles();
@@ -66,7 +79,7 @@ const DetailsItemHideButton: React.FC<DetailsItemHideButtonProps> = ({ object, c
         [dispatch, object],
     );
 
-    const Icon = object.hide ? EyeOffRegular : EyeRegular;
+    const Icon = object.hide ? EyeOffIcon : EyeIcon;
     const tooltip = object.hide ? 'Show' : 'Hide';
 
     return (
@@ -127,6 +140,11 @@ const useStyles = makeStyles({
         whiteSpace: 'nowrap',
     },
 
+    nested: {
+        gap: tokens.spacingHorizontalXS,
+        ...typographyStyles.caption1,
+    },
+
     buttons: {
         display: 'flex',
         flexFlow: 'row',
@@ -141,5 +159,13 @@ const useStyles = makeStyles({
 
     visible: {
         opacity: 1,
+    },
+
+    selectedButton: {
+        color: tokens.colorNeutralForegroundOnBrand,
+
+        ':hover': {
+            color: tokens.colorNeutralForegroundOnBrand,
+        },
     },
 });

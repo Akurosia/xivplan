@@ -1,10 +1,11 @@
+import { DrawImageRegular } from '@fluentui/react-icons';
 import React, { useMemo } from 'react';
 import { Group, Line } from 'react-konva';
 import { DetailsItem } from '../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../panel/ListComponentRegistry';
 import { RendererProps, registerRenderer } from '../render/ObjectRegistry';
-import { HIGHLIGHT_WIDTH, SELECTED_PROPS } from '../render/SceneTheme';
 import { LayerName } from '../render/layers';
+import { HIGHLIGHT_WIDTH, SELECTED_PROPS } from '../render/sceneTheme';
 import { DrawObject, ObjectType } from '../scene';
 import { DRAW_LINE_PROPS } from './DrawObjectStyles';
 import { HideCutoutGroup } from './HideGroup';
@@ -53,7 +54,7 @@ export const DrawObjectRenderer: React.FC<RendererProps<DrawObject>> = ({ object
 registerRenderer<DrawObject>(ObjectType.Draw, LayerName.Default, DrawObjectRenderer);
 
 export const DrawDetails: React.FC<ListComponentProps<DrawObject>> = (props) => {
-    return <DetailsItem name="Drawing" {...props} />;
+    return <DetailsItem icon={<DrawImageRegular color={props.object.color} />} name="Drawing" {...props} />;
 };
 
 registerListComponent<DrawObject>(ObjectType.Draw, DrawDetails);

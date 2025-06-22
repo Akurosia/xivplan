@@ -34,7 +34,7 @@ import React, { HTMLAttributes, useCallback, useMemo, useState } from 'react';
 import { HotkeyBlockingDialogBody } from './HotkeyBlockingDialogBody';
 import { useScene } from './SceneProvider';
 import { ScenePreview } from './render/SceneRenderer';
-import { MIN_STAGE_WIDTH } from './render/SceneTheme';
+import { MIN_STAGE_WIDTH } from './render/sceneTheme';
 import { Scene } from './scene';
 
 export const StepSelect: React.FC = () => {
@@ -281,7 +281,14 @@ const StepItem = React.forwardRef<HTMLDivElement, StepItemProps>(({ scene, step,
     return (
         <div ref={ref} className={mergeClasses(classes.stepItem, className)} {...props}>
             <div className={classes.stepHeader}>{stepText}</div>
-            <ScenePreview scene={scene} stepIndex={step.index} width={PREVIEW_SIZE} height={PREVIEW_SIZE} simple />
+            <ScenePreview
+                scene={scene}
+                stepIndex={step.index}
+                width={PREVIEW_SIZE}
+                height={PREVIEW_SIZE}
+                backgroundColor="transparent"
+                simple
+            />
         </div>
     );
 });

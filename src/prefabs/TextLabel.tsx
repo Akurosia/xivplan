@@ -8,8 +8,8 @@ import { DetailsItem } from '../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../panel/ListComponentRegistry';
 import { RendererProps, registerRenderer } from '../render/ObjectRegistry';
 import { ActivePortal } from '../render/Portals';
-import { SELECTED_PROPS, useSceneTheme } from '../render/SceneTheme';
 import { LayerName } from '../render/layers';
+import { SELECTED_PROPS, useSceneTheme } from '../render/sceneTheme';
 import { ObjectType, TextObject } from '../scene';
 import { useKonvaCache } from '../useKonvaCache';
 import { usePanelDrag } from '../usePanelDrag';
@@ -26,7 +26,7 @@ const DEFAULT_TEXT_COLOR = '#ffffff';
 const DEFAULT_TEXT_OPACITY = 100;
 const DEFAULT_FONT_SIZE = 25;
 
-const ICON = <DrawTextRegular />;
+const Icon = DrawTextRegular;
 
 export const TextLabel: React.FC = () => {
     const [, setDragObject] = usePanelDrag();
@@ -35,7 +35,7 @@ export const TextLabel: React.FC = () => {
         <PrefabIcon
             draggable
             name="Text"
-            icon={ICON}
+            icon={<Icon />}
             onDragStart={(e) => {
                 setDragObject({
                     object: {
@@ -255,7 +255,7 @@ const TextRenderer: React.FC<RendererProps<TextObject>> = ({ object }) => {
 registerRenderer<TextObject>(ObjectType.Text, LayerName.Foreground, TextRenderer);
 
 const TextDetails: React.FC<ListComponentProps<TextObject>> = ({ object, ...props }) => {
-    return <DetailsItem icon={ICON} name={object.text} object={object} {...props} />;
+    return <DetailsItem icon={<Icon color={object.color} />} name={object.text} object={object} {...props} />;
 };
 
 registerListComponent<TextObject>(ObjectType.Text, TextDetails);

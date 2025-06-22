@@ -1,6 +1,6 @@
 import { Field, makeStyles, mergeClasses, SpinButtonProps, tokens } from '@fluentui/react-components';
 import React from 'react';
-import { ARENA_BACKGROUND_COLOR } from './render/SceneTheme';
+import { sceneTokens } from './render/sceneTheme';
 import { SpinButton } from './SpinButton';
 import { useControlStyles } from './useControlStyles';
 
@@ -37,7 +37,7 @@ const useStyles = makeStyles({
     container: {
         width: `${BOX_SIZE}px`,
         height: `${BOX_SIZE}px`,
-        background: ARENA_BACKGROUND_COLOR,
+        background: sceneTokens.colorArena,
         border: `1px solid ${tokens.colorNeutralStroke1}`,
         borderRadius: tokens.borderRadiusMedium,
         overflow: 'hidden',

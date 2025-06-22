@@ -10,8 +10,8 @@ import {
 import {
     CursorClickFilled,
     CursorClickRegular,
-    PaintBrushFilled,
-    PaintBrushRegular,
+    DrawImageFilled,
+    DrawImageRegular,
     bundleIcon,
 } from '@fluentui/react-icons';
 import React, { useCallback } from 'react';
@@ -22,14 +22,14 @@ import { OpacitySlider } from '../OpacitySlider';
 import { EditMode } from '../editMode';
 import '../prefabs/DrawObjectRenderer';
 import { useSpinChanged } from '../prefabs/useSpinChanged';
-import { COLOR_SWATCHES } from '../render/SceneTheme';
+import { COLOR_SWATCHES } from '../render/sceneTheme';
 import { useControlStyles } from '../useControlStyles';
 import { useDrawConfig } from '../useDrawConfig';
 import { useEditMode } from '../useEditMode';
 import { useHotkeys } from '../useHotkeys';
 
 const CursorClick = bundleIcon(CursorClickFilled, CursorClickRegular);
-const PaintBrush = bundleIcon(PaintBrushFilled, PaintBrushRegular);
+const DrawImage = bundleIcon(DrawImageFilled, DrawImageRegular);
 
 type ToolButtonPropsGetter = (mode: EditMode) => ToggleButtonProps;
 
@@ -82,7 +82,7 @@ export const DrawPanel: React.FC = () => {
                     <ToggleButton size="large" icon={<CursorClick />} {...getToolButtonProps(EditMode.Normal)}>
                         Edit
                     </ToggleButton>
-                    <ToggleButton size="large" icon={<PaintBrush />} {...getToolButtonProps(EditMode.Draw)}>
+                    <ToggleButton size="large" icon={<DrawImage />} {...getToolButtonProps(EditMode.Draw)}>
                         Draw
                     </ToggleButton>
                 </div>

@@ -6,8 +6,8 @@ import { getDragOffset, registerDropHandler } from '../DropHandler';
 import { DetailsItem } from '../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../panel/ListComponentRegistry';
 import { RendererProps, registerRenderer } from '../render/ObjectRegistry';
-import { COLOR_RED, SELECTED_PROPS } from '../render/SceneTheme';
 import { LayerName } from '../render/layers';
+import { COLOR_RED, SELECTED_PROPS } from '../render/sceneTheme';
 import { ArrowObject, ObjectType } from '../scene';
 import { usePanelDrag } from '../usePanelDrag';
 import { CompositeReplaceGroup } from './CompositeReplaceGroup';
@@ -26,7 +26,7 @@ const DEFAULT_ARROW_HEIGHT = 150;
 const DEFAULT_ARROW_COLOR = COLOR_RED;
 const DEFAULT_ARROW_OPACITY = 100;
 
-const ICON = <ArrowUpRegular />;
+const Icon = ArrowUpRegular;
 
 export const MarkerArrow: React.FC = () => {
     const [, setDragObject] = usePanelDrag();
@@ -35,7 +35,7 @@ export const MarkerArrow: React.FC = () => {
         <PrefabIcon
             draggable
             name={NAME}
-            icon={ICON}
+            icon={<Icon />}
             onDragStart={(e) => {
                 setDragObject({
                     object: {
@@ -119,8 +119,7 @@ const ArrowRenderer: React.FC<RendererProps<ArrowObject>> = ({ object }) => {
 registerRenderer<ArrowObject>(ObjectType.Arrow, LayerName.Default, ArrowRenderer);
 
 const ArrowDetails: React.FC<ListComponentProps<ArrowObject>> = (props) => {
-    // TODO: color filter icon?
-    return <DetailsItem icon={ICON} name={NAME} {...props} />;
+    return <DetailsItem icon={<Icon color={props.object.color} />} name={NAME} {...props} />;
 };
 
 registerListComponent<ArrowObject>(ObjectType.Arrow, ArrowDetails);

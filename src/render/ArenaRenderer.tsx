@@ -1,6 +1,7 @@
 import { Context as KonvaContext } from 'konva/lib/Context';
 import { ShapeConfig } from 'konva/lib/Shape';
-import React, { PropsWithChildren } from 'react';
+import { ImageConfig } from 'konva/lib/shapes/Image';
+import React, { PropsWithChildren, useMemo } from 'react';
 import { Ellipse, Group, Image, Rect, Shape } from 'react-konva';
 import { useScene } from '../SceneProvider';
 import {
@@ -24,9 +25,10 @@ import {
     Scene,
 } from '../scene';
 import { useImageTracked } from '../useObjectLoading';
-import { degtorad, getLinearGridDivs } from '../util';
+import { useStyledSvg } from '../useStyledSvg';
+import { degtorad, getLinearGridDivs, getUrlFileExtension } from '../util';
 import { ArenaTickRenderer } from './ArenaTickRenderer';
-import { useSceneTheme } from './SceneTheme';
+import { useSceneTheme, useSceneThemeHtmlStyles } from './sceneTheme';
 
 export interface ArenaRendererProps {
     backgroundColor?: string;
@@ -35,9 +37,12 @@ export interface ArenaRendererProps {
 }
 
 export const ArenaRenderer: React.FC<ArenaRendererProps> = ({ backgroundColor, simple }) => {
+    const theme = useSceneTheme();
+    backgroundColor ??= theme.colorBackground;
+
     return (
         <>
-            {backgroundColor && <Backdrop color={backgroundColor} />}
+            <Backdrop color={backgroundColor} />
             <BackgroundRenderer />
             <ArenaClip>
                 <BackgroundImage />
@@ -59,7 +64,7 @@ const Backdrop: React.FC<BackdropProps> = ({ color }) => {
     return <Rect fill={color} x={0} y={0} {...size} />;
 };
 
-function getArenaClip(scene: Scene): (context: KonvaContext) => void {
+function getArenaClip(scene: Scene): ((context: KonvaContext) => void) | undefined {
     const rect = getCanvasArenaRect(scene);
     const center = getCanvasCoord(scene, { x: 0, y: 0 });
 
@@ -73,18 +78,21 @@ function getArenaClip(scene: Scene): (context: KonvaContext) => void {
             };
 
         case ArenaShape.Rectangle:
-        case ArenaShape.None:
             return (ctx) => {
                 ctx.beginPath();
                 ctx.rect(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2);
                 ctx.clip();
                 ctx.closePath();
             };
+
+        case ArenaShape.None:
+            return undefined;
     }
 }
 
 const ArenaClip: React.FC<PropsWithChildren> = ({ children }) => {
     const { scene } = useScene();
+
     const clip = getArenaClip(scene);
 
     return <Group clipFunc={clip}>{children}</Group>;
@@ -92,16 +100,50 @@ const ArenaClip: React.FC<PropsWithChildren> = ({ children }) => {
 
 const BackgroundImage: React.FC = () => {
     const { scene } = useScene();
-    const [image] = useImageTracked(scene.arena.backgroundImage ?? '');
+
+    const url = scene.arena.backgroundImage ?? '';
+    const ext = useMemo(() => getUrlFileExtension(url), [url]);
+
+    if (!url) {
+        return null;
+    }
+
+    const opacity = (scene.arena.backgroundOpacity ?? 100) / 100;
+    const position = getCanvasArenaRect(scene);
+    const shadow = scene.arena.shape === ArenaShape.None ? SHADOW : {};
+
+    switch (ext) {
+        case '.svg':
+            return <BackgroundImageSvg url={url} opacity={opacity} {...position} {...shadow} />;
+
+        default:
+            return <BackgroundImageBitmap url={url} opacity={opacity} {...position} {...shadow} />;
+    }
+};
+
+interface BackgroundImageProps extends Omit<ImageConfig, 'image'> {
+    url: string;
+}
+
+const BackgroundImageBitmap: React.FC<BackgroundImageProps> = ({ url, ...props }) => {
+    const [image] = useImageTracked(url);
 
     if (!image) {
         return null;
     }
 
-    const opacity = scene.arena.backgroundOpacity ?? 100;
-    const position = getCanvasArenaRect(scene);
+    return <Image image={image} {...props} />;
+};
 
-    return <Image image={image} opacity={opacity / 100} {...position} />;
+const BackgroundImageSvg: React.FC<BackgroundImageProps> = ({ url, ...props }) => {
+    const style = useSceneThemeHtmlStyles();
+    const [image] = useStyledSvg(url, style);
+
+    if (!image) {
+        return null;
+    }
+
+    return <Image image={image} {...props} />;
 };
 
 const BackgroundRenderer: React.FC = () => {
@@ -222,7 +264,7 @@ const RadialGridRenderer: React.FC<GridProps<RadialGrid>> = ({ grid }) => {
     return (
         <Shape
             sceneFunc={(ctx, shape) => {
-                clip(ctx);
+                clip?.(ctx);
 
                 ctx.beginPath();
 
@@ -289,7 +331,7 @@ const CustomRectangularGridRenderer: React.FC<GridProps<CustomRectangularGrid>> 
     return (
         <Shape
             sceneFunc={(context, shape) => {
-                clip(context);
+                clip?.(context);
 
                 context.beginPath();
 
@@ -325,7 +367,7 @@ const CustomRadialGridRenderer: React.FC<GridProps<CustomRadialGrid>> = ({ grid 
     return (
         <Shape
             sceneFunc={(ctx, shape) => {
-                clip(ctx);
+                clip?.(ctx);
 
                 ctx.beginPath();
 
