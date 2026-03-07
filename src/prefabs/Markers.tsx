@@ -8,22 +8,24 @@ import { DetailsItem } from '../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../panel/ListComponentRegistry';
 import { RendererProps, registerRenderer } from '../render/ObjectRegistry';
 import { LayerName } from '../render/layers';
+import { MarkerObject, ObjectType } from '../scene';
 import {
     COLOR_MARKER_BLUE,
     COLOR_MARKER_PURPLE,
     COLOR_MARKER_RED,
     COLOR_MARKER_YELLOW,
     DEFAULT_MARKER_OPACITY,
-    SELECTED_PROPS,
-} from '../render/sceneTheme';
-import { MarkerObject, ObjectType } from '../scene';
+} from '../theme';
 import { useImageTracked } from '../useObjectLoading';
 import { usePanelDrag } from '../usePanelDrag';
 import { makeDisplayName } from '../util';
 import { HideGroup } from './HideGroup';
 import { PrefabIcon } from './PrefabIcon';
 import { ResizeableObjectContainer } from './ResizeableObjectContainer';
-import { useShowHighlight } from './highlight';
+import { useHighlightProps, useOverrideProps } from './highlight';
+
+// https://github.com/ArnaudBarre/eslint-plugin-react-refresh/issues/103
+/* eslint-disable react-refresh/only-export-components */
 
 const DEFAULT_SIZE = 42;
 const ICON_RATIO = 32 / DEFAULT_SIZE;
@@ -96,7 +98,7 @@ interface OutlineProps {
     highlightWidth: number;
     highlightHeight: number;
     highlightOffset: number;
-    showHighlight: boolean;
+    highlightProps?: ShapeConfig;
     strokeProps: ShapeConfig;
     dashSize: number;
     opacity: number;
@@ -107,20 +109,19 @@ const EllipseOutline: React.FC<OutlineProps> = ({
     height,
     highlightWidth,
     highlightHeight,
-    showHighlight,
+    highlightProps,
     strokeProps,
     opacity,
 }) => {
     return (
         <>
-            {showHighlight && (
+            {highlightProps && (
                 <Ellipse
                     x={width / 2}
                     y={height / 2}
                     radiusX={highlightWidth / 2}
                     radiusY={highlightHeight / 2}
-                    {...SELECTED_PROPS}
-                    opacity={0.25}
+                    {...highlightProps}
                 />
             )}
 
@@ -144,22 +145,21 @@ const RectangleOutline: React.FC<OutlineProps> = ({
     highlightWidth,
     highlightHeight,
     highlightOffset,
-    showHighlight,
+    highlightProps,
     strokeProps,
     dashSize,
     opacity,
 }) => {
     return (
         <>
-            {showHighlight && (
+            {highlightProps && (
                 <Rect
                     x={-highlightOffset / 2}
                     y={-highlightOffset / 2}
                     width={highlightWidth}
                     height={highlightHeight}
-                    {...SELECTED_PROPS}
+                    {...highlightProps}
                     {...ALIGN_TO_PIXEL}
-                    opacity={0.25}
                 />
             )}
 
@@ -178,7 +178,8 @@ const RectangleOutline: React.FC<OutlineProps> = ({
 };
 
 const MarkerRenderer: React.FC<RendererProps<MarkerObject>> = ({ object }) => {
-    const showHighlight = useShowHighlight(object);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
     const [image] = useImageTracked(object.image);
 
     const iconWidth = object.width * ICON_RATIO;
@@ -204,12 +205,12 @@ const MarkerRenderer: React.FC<RendererProps<MarkerObject>> = ({ object }) => {
     return (
         <ResizeableObjectContainer object={object} transformerProps={{ centeredScaling: true }}>
             {(groupProps) => (
-                <Group {...groupProps}>
+                <Group {...groupProps} {...overrideProps}>
                     {object.shape === 'circle' && (
                         <EllipseOutline
                             width={object.width}
                             height={object.height}
-                            showHighlight={showHighlight}
+                            highlightProps={highlightProps}
                             highlightWidth={highlightWidth}
                             highlightHeight={highlightHeight}
                             highlightOffset={highlightOffset}
@@ -222,7 +223,7 @@ const MarkerRenderer: React.FC<RendererProps<MarkerObject>> = ({ object }) => {
                         <RectangleOutline
                             width={object.width}
                             height={object.height}
-                            showHighlight={showHighlight}
+                            highlightProps={highlightProps}
                             highlightWidth={highlightWidth}
                             highlightHeight={highlightHeight}
                             highlightOffset={highlightOffset}

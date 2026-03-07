@@ -1,13 +1,17 @@
 import Konva from 'konva';
 import { KonvaEventObject } from 'konva/lib/Node';
 import { Vector2d } from 'konva/lib/types';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Group } from 'react-konva';
 import { useScene } from '../SceneProvider';
 import { getCanvasCoord, rotateCoord } from '../coord';
 import { ControlsPortal } from '../render/Portals';
 import { useStage } from '../render/stage';
+import { Scene } from '../scene';
 import { Handle } from './Handle';
+
+// https://github.com/ArnaudBarre/eslint-plugin-react-refresh/issues/103
+/* eslint-disable react-refresh/only-export-components */
 
 export const CONTROL_POINT_BORDER_COLOR = '#00a1ff';
 
@@ -32,13 +36,13 @@ export interface ControlPointConfig<T extends Vector2d, S, P> {
      * Returns each control point handle. Positions are relative to the center of the
      * object.
      */
-    handleFunc(object: T, handle: HandleFuncProps, props: Readonly<P>): Handle[];
+    handleFunc(scene: Readonly<Scene>, object: T, handle: HandleFuncProps, props: Readonly<P>): Handle[];
     /**
      * Returns a state object to pass to the child.
      */
-    stateFunc(object: T, handle: HandleFuncProps, props: Readonly<P>): S;
+    stateFunc(scene: Readonly<Scene>, object: T, handle: HandleFuncProps, props: Readonly<P>): S;
 
-    getRotation?(object: T, handle: HandleFuncProps, props: Readonly<P>): number;
+    getRotation?(scene: Readonly<Scene>, object: T, handle: HandleFuncProps, props: Readonly<P>): number;
     /**
      * Renders the border or bounding box.
      */
@@ -97,22 +101,16 @@ export function createControlPointManager<T extends Vector2d, S, P = unknown>(
         const [transform, setTransform] = useState<TransformState>();
         const groupRef = useRef<Konva.Group>(null);
 
-        const { state, handles, rotation } = useMemo(() => {
-            let pointerPos: Vector2d | undefined;
-            if (transform) {
-                pointerPos = getHandleCenter(transform);
-            }
+        const pointerPos = transform ? getHandleCenter(transform) : undefined;
 
-            const activeHandleId = transform?.handleId ?? 0;
-            const handleProps = { pointerPos, activeHandleId };
+        const activeHandleId = transform?.handleId ?? 0;
+        const handleProps = { pointerPos, activeHandleId };
 
-            const handles = config.handleFunc(object, handleProps, props);
-            const state = config.stateFunc(object, handleProps, props);
-            const rotation = config.getRotation?.(object, handleProps, props) ?? 0;
+        const handles = config.handleFunc(scene, object, handleProps, props);
+        const state = config.stateFunc(scene, object, handleProps, props);
+        const rotation = config.getRotation?.(scene, object, handleProps, props) ?? 0;
 
-            return { handles, state, rotation };
-        }, [transform, object, props]);
-
+        // https://github.com/reactwg/react-compiler/discussions/18
         const getPointerPos = useCallback(() => {
             if (!groupRef.current) {
                 return { x: 0, y: 0 };
@@ -120,36 +118,33 @@ export function createControlPointManager<T extends Vector2d, S, P = unknown>(
 
             const { x, y } = groupRef.current.getRelativePointerPosition() ?? { x: 0, y: 0 };
             return { x, y: -y };
-        }, [groupRef]);
+        }, []);
 
-        const getTransformStart = useCallback(
-            (i: number) => {
-                return (e: KonvaEventObject<Event>) => {
-                    e.evt.stopPropagation();
+        const getTransformStart = (i: number) => {
+            return (e: KonvaEventObject<Event>) => {
+                e.evt.stopPropagation();
 
-                    const pointerPos = getPointerPos();
-                    const handleCornerOffset = e.target.getRelativePointerPosition() ?? { x: 0, y: 0 };
+                const pointerPos = getPointerPos();
+                const handleCornerOffset = e.target.getRelativePointerPosition() ?? { x: 0, y: 0 };
 
-                    // Offset is relative to rotated object, but we want the offset
-                    // in screen coordinates, so back out the rotation.
-                    const handleOffset = rotateCoord(
-                        {
-                            x: handleCornerOffset.x - e.target.offsetX(),
-                            y: handleCornerOffset.y - e.target.offsetY(),
-                        },
-                        -rotation,
-                    );
+                // Offset is relative to rotated object, but we want the offset
+                // in screen coordinates, so back out the rotation.
+                const handleOffset = rotateCoord(
+                    {
+                        x: handleCornerOffset.x - e.target.offsetX(),
+                        y: handleCornerOffset.y - e.target.offsetY(),
+                    },
+                    -rotation,
+                );
 
-                    const handleId = getHandleId(config.handleFunc(object, {}, props), i);
+                const handleId = getHandleId(config.handleFunc(scene, object, {}, props), i);
 
-                    onActive?.(true);
-                    setTransform({ pointerPos, handleOffset, handleId });
-                };
-            },
-            [onActive, setTransform, getPointerPos, object, rotation, props],
-        );
+                onActive?.(true);
+                setTransform({ pointerPos, handleOffset, handleId });
+            };
+        };
 
-        useEffect(() => {
+        useLayoutEffect(() => {
             if (!transform) {
                 return;
             }
@@ -169,7 +164,7 @@ export function createControlPointManager<T extends Vector2d, S, P = unknown>(
 
                 const activeHandleId = transform?.handleId ?? 0;
                 const handleProps = { pointerPos, activeHandleId };
-                const state = config.stateFunc(object, handleProps, props);
+                const state = config.stateFunc(scene, object, handleProps, props);
                 onTransformEnd?.(state);
             };
 
@@ -187,16 +182,13 @@ export function createControlPointManager<T extends Vector2d, S, P = unknown>(
                 window.removeEventListener('mouseup', handleEnd, true);
                 window.removeEventListener('touchend', handleEnd, true);
             };
-        }, [transform, object, onActive, setTransform, onTransformEnd, getPointerPos, props]);
+        }, [scene, transform, object, onActive, setTransform, onTransformEnd, getPointerPos, props]);
 
-        const setCursor = useCallback(
-            (cursor: string) => {
-                if (stage) {
-                    stage.container().style.cursor = cursor;
-                }
-            },
-            [stage],
-        );
+        const setCursor = (cursor: string) => {
+            if (stage) {
+                stage.container().style.cursor = cursor;
+            }
+        };
 
         const center = getCanvasCoord(scene, object);
 

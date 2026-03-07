@@ -7,23 +7,26 @@ import { Arc, Circle, Path, Text } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../DropHandler';
 import { DetailsItem } from '../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../panel/ListComponentRegistry';
-import { RendererProps, registerRenderer } from '../render/ObjectRegistry';
+import { registerRenderer, RendererProps } from '../render/ObjectRegistry';
 import { LayerName } from '../render/layers';
+import { EnemyObject, EnemyRingStyle, ObjectType } from '../scene';
 import {
     CENTER_DOT_RADIUS,
     DEFAULT_ENEMY_COLOR,
     DEFAULT_ENEMY_OPACITY,
-    SELECTED_PROPS,
+    getEnemyTextConfig,
     useSceneTheme,
-} from '../render/sceneTheme';
-import { EnemyObject, EnemyRingStyle, ObjectType } from '../scene';
+} from '../theme';
 import { useKonvaCache } from '../useKonvaCache';
 import { usePanelDrag } from '../usePanelDrag';
 import { makeDisplayName } from '../util';
 import { HideGroup } from './HideGroup';
 import { PrefabIcon } from './PrefabIcon';
 import { RadiusObjectContainer } from './RadiusObjectContainer';
-import { useShowHighlight } from './highlight';
+import { useHighlightProps, useOverrideProps } from './highlight';
+
+// https://github.com/ArnaudBarre/eslint-plugin-react-refresh/issues/103
+/* eslint-disable react-refresh/only-export-components */
 
 const DEFAULT_SIZE = 32;
 
@@ -92,7 +95,8 @@ interface RingProps extends ShapeConfig {
     name?: string;
     radius: number;
     color: string;
-    isSelected?: boolean;
+    highlightProps?: ShapeConfig;
+    overrideProps?: ShapeConfig;
 }
 
 interface EnemyLabelProps extends TextConfig {
@@ -120,6 +124,7 @@ const EnemyLabel: React.FC<EnemyLabelProps> = ({ name, radius, ...props }) => {
             align="center"
             verticalAlign="middle"
             fillAfterStrokeEnabled
+            listening={false}
             {...props}
         />
     );
@@ -146,7 +151,7 @@ function getShapeProps(color: string, radius: number, strokeRatio: number, minSt
     };
 }
 
-const CircleRing: React.FC<RingProps> = ({ radius, color, isSelected, opacity, ...props }) => {
+const CircleRing: React.FC<RingProps> = ({ radius, color, highlightProps, overrideProps, opacity, ...props }) => {
     const outerProps = getShapeProps(color, radius, OUTER_STROKE_RATIO, OUTER_STROKE_MIN);
     const innerProps = getShapeProps(color, radius, INNER_STROKE_RATIO, INNER_STROKE_MIN);
     const innerRadius = getInnerRadius(radius);
@@ -154,7 +159,7 @@ const CircleRing: React.FC<RingProps> = ({ radius, color, isSelected, opacity, .
 
     return (
         <>
-            {isSelected && <Circle radius={radius} {...SELECTED_PROPS} />}
+            {highlightProps && <Circle radius={radius} {...highlightProps} {...overrideProps} />}
 
             <HideGroup opacity={opacity} {...props}>
                 <Circle {...outerProps} radius={outerRadius} />
@@ -166,7 +171,7 @@ const CircleRing: React.FC<RingProps> = ({ radius, color, isSelected, opacity, .
 
 interface DirectionalRingProps extends RingProps {
     rotation: number;
-    groupRef: RefObject<Konva.Group>;
+    groupRef: RefObject<Konva.Group | null>;
 }
 
 const DirectionalRing: React.FC<DirectionalRingProps> = ({
@@ -174,7 +179,8 @@ const DirectionalRing: React.FC<DirectionalRingProps> = ({
     color,
     opacity,
     rotation,
-    isSelected,
+    highlightProps,
+    overrideProps,
     groupRef,
     ...props
 }) => {
@@ -189,7 +195,7 @@ const DirectionalRing: React.FC<DirectionalRingProps> = ({
 
     return (
         <>
-            {isSelected && <Circle radius={radius + outerProps.strokeWidth / 2} {...SELECTED_PROPS} />}
+            {highlightProps && <Circle radius={radius} {...highlightProps} {...overrideProps} />}
 
             <HideGroup opacity={opacity} ref={groupRef} rotation={rotation} {...props}>
                 <Circle radius={radius} fill="transparent" />
@@ -224,7 +230,8 @@ const OmnidirectionalRing: React.FC<DirectionalRingProps> = ({
     color,
     opacity,
     rotation,
-    isSelected,
+    highlightProps,
+    overrideProps,
     groupRef,
     ...props
 }) => {
@@ -239,7 +246,7 @@ const OmnidirectionalRing: React.FC<DirectionalRingProps> = ({
 
     return (
         <>
-            {isSelected && <Circle radius={radius} {...SELECTED_PROPS} />}
+            {highlightProps && <Circle radius={radius} {...highlightProps} {...overrideProps} />}
 
             <HideGroup opacity={opacity} ref={groupRef} rotation={rotation} {...props}>
                 <Circle radius={radius} fill="transparent" />
@@ -262,7 +269,7 @@ const OmnidirectionalRing: React.FC<DirectionalRingProps> = ({
 interface EnemyRendererProps extends RendererProps<EnemyObject> {
     radius: number;
     rotation: number;
-    groupRef: RefObject<Konva.Group>;
+    groupRef: RefObject<Konva.Group | null>;
     isDragging?: boolean;
 }
 
@@ -270,8 +277,9 @@ function renderRing(
     object: EnemyObject,
     radius: number,
     rotation: number,
-    groupRef: RefObject<Konva.Group>,
-    showHighlight: boolean,
+    groupRef: RefObject<Konva.Group | null>,
+    highlightProps?: ShapeConfig,
+    overrideProps?: ShapeConfig,
 ) {
     switch (object.ring) {
         case EnemyRingStyle.NoDirection:
@@ -280,7 +288,9 @@ function renderRing(
                     radius={radius}
                     color={object.color}
                     opacity={object.opacity / 100}
-                    isSelected={showHighlight}
+                    highlightProps={highlightProps}
+                    overrideProps={overrideProps}
+                    {...overrideProps}
                 />
             );
 
@@ -291,8 +301,10 @@ function renderRing(
                     rotation={rotation}
                     color={object.color}
                     opacity={object.opacity / 100}
-                    isSelected={showHighlight}
+                    highlightProps={highlightProps}
+                    overrideProps={overrideProps}
                     groupRef={groupRef}
+                    {...overrideProps}
                 />
             );
 
@@ -303,26 +315,30 @@ function renderRing(
                     rotation={rotation}
                     color={object.color}
                     opacity={object.opacity / 100}
-                    isSelected={showHighlight}
+                    highlightProps={highlightProps}
+                    overrideProps={overrideProps}
                     groupRef={groupRef}
+                    {...overrideProps}
                 />
             );
     }
 }
 
 const EnemyRenderer: React.FC<EnemyRendererProps> = ({ object, radius, rotation, groupRef, isDragging }) => {
-    const showHighlight = useShowHighlight(object);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
     const theme = useSceneTheme();
+    const textConfig = getEnemyTextConfig(theme);
 
     return (
         <>
-            <HideGroup>
+            <HideGroup {...overrideProps}>
                 {isDragging && <Circle radius={CENTER_DOT_RADIUS} fill={object.color} />}
 
-                <EnemyLabel name={object.name} radius={radius} color={object.color} {...theme.enemyText} />
+                <EnemyLabel name={object.name} radius={radius} color={object.color} {...textConfig} />
             </HideGroup>
 
-            {renderRing(object, radius, rotation, groupRef, showHighlight)}
+            {renderRing(object, radius, rotation, groupRef, highlightProps, overrideProps)}
         </>
     );
 };

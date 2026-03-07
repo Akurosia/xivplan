@@ -1,5 +1,5 @@
 import Konva from 'konva';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Group, Rect } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
 import Icon from '../../assets/zone/line_stack.svg?react';
@@ -7,13 +7,13 @@ import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
 import { LayerName } from '../../render/layers';
-import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, sceneVars, SELECTED_PROPS } from '../../render/sceneTheme';
 import { ObjectType, RectangleZone } from '../../scene';
+import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
 import { HideGroup } from '../HideGroup';
 import { PrefabIcon } from '../PrefabIcon';
 import { ResizeableObjectContainer } from '../ResizeableObjectContainer';
-import { useShowHighlight } from '../highlight';
+import { useHighlightProps, useOverrideProps } from '../highlight';
 import { ChevronConfig, ChevronTail } from './shapes';
 import { getArrowStyle } from './style';
 
@@ -70,24 +70,23 @@ const ARROW_HEIGHT_FRAC = 3 / 5;
 const ARROW_PAD = 0.3;
 
 const LineStackRenderer: React.FC<RendererProps<RectangleZone>> = ({ object }) => {
-    const showHighlight = useShowHighlight(object);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
     const [pattern, setPattern] = useState<HTMLImageElement>();
 
     const patternWidth = object.width;
     const patternHeight = object.width / 2;
 
-    const arrow = useMemo(() => {
-        const width = patternWidth * ARROW_SIZE_FRAC;
-        const height = width * ARROW_HEIGHT_FRAC;
+    const width = patternWidth * ARROW_SIZE_FRAC;
+    const height = width * ARROW_HEIGHT_FRAC;
 
-        return {
-            ...getArrowStyle(object.color, object.opacity * 2),
-            width,
-            height,
-            y: patternHeight / 2,
-            chevronAngle: CHEVRON_ANGLE,
-        } as ChevronConfig;
-    }, [object.color, object.opacity, patternWidth, patternHeight]);
+    const arrow: ChevronConfig = {
+        ...getArrowStyle(object.color, object.opacity * 2),
+        width,
+        height,
+        y: patternHeight / 2,
+        chevronAngle: CHEVRON_ANGLE,
+    };
 
     const arrowRef = useRef<Konva.Group>(null);
     useEffect(() => {
@@ -105,10 +104,8 @@ const LineStackRenderer: React.FC<RendererProps<RectangleZone>> = ({ object }) =
         <>
             <ResizeableObjectContainer object={object} transformerProps={{ centeredScaling: true, keepRatio: false }}>
                 {(groupProps) => (
-                    <Group {...groupProps}>
-                        {showHighlight && (
-                            <Rect width={object.width} height={object.height} {...SELECTED_PROPS} opacity={0.25} />
-                        )}
+                    <Group {...groupProps} {...overrideProps}>
+                        {highlightProps && <Rect width={object.width} height={object.height} {...highlightProps} />}
                         <HideGroup>
                             <Rect
                                 width={object.width}
@@ -134,7 +131,7 @@ const LineStackRenderer: React.FC<RendererProps<RectangleZone>> = ({ object }) =
                 )}
             </ResizeableObjectContainer>
 
-            <Group ref={arrowRef} x={OFFSCREEN_X} y={OFFSCREEN_Y}>
+            <Group ref={arrowRef} x={OFFSCREEN_X} y={OFFSCREEN_Y} {...overrideProps}>
                 <ChevronTail x={patternWidth * ARROW_PAD} rotation={90} {...arrow} />
                 <ChevronTail x={patternWidth * (1 - ARROW_PAD)} rotation={-90} {...arrow} />
             </Group>
@@ -147,7 +144,7 @@ registerRenderer<RectangleZone>(ObjectType.LineStack, LayerName.Ground, LineStac
 const LineStackDetails: React.FC<ListComponentProps<RectangleZone>> = ({ object, ...props }) => {
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
             name={NAME}
             object={object}
             {...props}

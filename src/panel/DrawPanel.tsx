@@ -14,15 +14,15 @@ import {
     DrawImageRegular,
     bundleIcon,
 } from '@fluentui/react-icons';
-import React, { useCallback } from 'react';
+import React from 'react';
 import { BrushSizeControl } from '../BrushSizeControl';
-import { CompactColorPicker } from '../CompactColorPicker';
+import { CompactColorPicker, CompactColorPickerProps } from '../CompactColorPicker';
 import { CompactSwatchColorPicker } from '../CompactSwatchColorPicker';
 import { OpacitySlider } from '../OpacitySlider';
 import { EditMode } from '../editMode';
 import '../prefabs/DrawObjectRenderer';
 import { useSpinChanged } from '../prefabs/useSpinChanged';
-import { COLOR_SWATCHES } from '../render/sceneTheme';
+import { useColorSwatches } from '../theme';
 import { useControlStyles } from '../useControlStyles';
 import { useDrawConfig } from '../useDrawConfig';
 import { useEditMode } from '../useEditMode';
@@ -36,44 +36,36 @@ type ToolButtonPropsGetter = (mode: EditMode) => ToggleButtonProps;
 export const DrawPanel: React.FC = () => {
     const classes = useStyles();
     const controlClasses = useControlStyles();
+    const colorSwatches = useColorSwatches();
     const [editMode, setEditMode] = useEditMode();
     const [config, setConfig] = useDrawConfig();
 
-    const setColor = useCallback((color: string) => setConfig({ ...config, color }), [config, setConfig]);
+    const setColor: CompactColorPickerProps['onChange'] = (data) => setConfig({ ...config, color: data.value });
 
-    const setOpacity = useCallback(
-        (opacity: number) => {
-            if (opacity !== config.opacity) {
-                setConfig({ ...config, opacity });
-            }
-        },
-        [config, setConfig],
-    );
+    const setOpacity = (opacity: number) => {
+        if (opacity !== config.opacity) {
+            setConfig({ ...config, opacity });
+        }
+    };
 
     const onSizeChanged = useSpinChanged((brushSize: number) => setConfig({ ...config, brushSize }));
 
-    const modeHotkey = useCallback(
-        (mode: EditMode) => (e: KeyboardEvent) => {
-            setEditMode(mode);
-            e.preventDefault();
-        },
-        [setEditMode],
-    );
+    const modeHotkey = (mode: EditMode) => (e: KeyboardEvent) => {
+        setEditMode(mode);
+        e.preventDefault();
+    };
 
     useHotkeys('e', {}, modeHotkey(EditMode.Normal), [editMode]);
     useHotkeys('d', {}, modeHotkey(EditMode.Draw), [editMode]);
 
-    const getToolButtonProps = useCallback<ToolButtonPropsGetter>(
-        (mode) => {
-            const checked = editMode === mode;
-            return {
-                checked,
-                className: mergeClasses(classes.button, checked && classes.checked),
-                onClick: () => setEditMode(mode),
-            };
-        },
-        [editMode, classes.button, classes.checked, setEditMode],
-    );
+    const getToolButtonProps: ToolButtonPropsGetter = (mode) => {
+        const checked = editMode === mode;
+        return {
+            checked,
+            className: mergeClasses(classes.button, checked && classes.checked),
+            onClick: () => setEditMode(mode),
+        };
+    };
 
     return (
         <div className={mergeClasses(controlClasses.panel, controlClasses.column)}>
@@ -87,17 +79,11 @@ export const DrawPanel: React.FC = () => {
                     </ToggleButton>
                 </div>
             </Field>
-            <CompactColorPicker
-                label="Color"
-                placeholder="Brush color"
-                color={config.color}
-                onChange={setColor}
-                debounceTime={0}
-            />
+            <CompactColorPicker label="Color" placeholder="Brush color" color={config.color} onChange={setColor} />
             <CompactSwatchColorPicker
-                swatches={COLOR_SWATCHES}
+                swatches={colorSwatches}
                 selectedValue={config.color}
-                onSelectionChange={(ev, data) => setColor(data.selectedSwatch)}
+                onSelectionChange={(ev, data) => setColor({ value: data.selectedSwatch, transient: false })}
             />
             <OpacitySlider value={config.opacity} onChange={(ev, data) => setOpacity(data.value)} />
             <BrushSizeControl

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Group, RegularPolygon } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
 import HexagonIcon from '../../assets/zone/hexagon.svg?react';
@@ -11,21 +11,19 @@ import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
 import { LayerName } from '../../render/layers';
-import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, sceneVars, SELECTED_PROPS } from '../../render/sceneTheme';
 import { ObjectType, PolygonZone } from '../../scene';
+import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
 import { HideGroup } from '../HideGroup';
 import { PrefabIcon } from '../PrefabIcon';
 import { RadiusObjectContainer } from '../RadiusObjectContainer';
-import { useShowHighlight } from '../highlight';
+import { useHighlightProps, useOverrideProps } from '../highlight';
 import { getZoneStyle } from './style';
 
 const NAME = 'Regular Polygon';
 
 const DEFAULT_RADIUS = 50;
 const DEFAULT_SIDES = 6;
-
-// TODO: add an option to determine whether point or side is at top
 
 export const ZonePolygon: React.FC = () => {
     const [, setDragObject] = usePanelDrag();
@@ -55,10 +53,11 @@ registerDropHandler<PolygonZone>(ObjectType.Polygon, (object, position) => {
             opacity: DEFAULT_AOE_OPACITY,
             radius: DEFAULT_RADIUS,
             sides: DEFAULT_SIDES,
+            orient: 'point',
             rotation: 0,
             ...object,
             ...position,
-        },
+        } as PolygonZone,
     };
 });
 
@@ -68,20 +67,20 @@ interface PolygonRendererProps extends RendererProps<PolygonZone> {
 }
 
 const PolygonRenderer: React.FC<PolygonRendererProps> = ({ object, radius, rotation }) => {
-    const isSelected = useShowHighlight(object);
-    const style = useMemo(
-        () => getZoneStyle(object.color, object.opacity, radius * 2, object.hollow),
-        [object.color, object.opacity, radius, object.hollow],
-    );
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
+    const style = getZoneStyle(object.color, object.opacity, radius * 2, object.hollow);
+
+    const orientRotation = object.orient === 'side' ? 180 / object.sides : 0;
 
     return (
-        <Group rotation={rotation}>
-            {isSelected && (
+        <Group rotation={rotation + orientRotation} {...overrideProps}>
+            {highlightProps && (
                 <RegularPolygon
                     radius={radius + style.strokeWidth / 2}
                     sides={object.sides}
                     {...style}
-                    {...SELECTED_PROPS}
+                    {...highlightProps}
                 />
             )}
             <HideGroup>
@@ -101,29 +100,31 @@ const PolygonContainer: React.FC<RendererProps<PolygonZone>> = ({ object }) => {
 
 registerRenderer<PolygonZone>(ObjectType.Polygon, LayerName.Ground, PolygonContainer);
 
-function getIcon(sides: number) {
+function getIconAndName(sides: number): [typeof TriangleIcon, string] {
     switch (sides) {
         case 3:
-            return TriangleIcon;
+            return [TriangleIcon, 'Triangle'];
         case 4:
-            return SquareIcon;
+            return [SquareIcon, 'Square'];
         case 5:
-            return PentagonIcon;
+            return [PentagonIcon, 'Pentagon'];
         case 6:
-            return HexagonIcon;
+            return [HexagonIcon, 'Hexagon'];
         case 7:
-            return SeptagonIcon;
+            return [SeptagonIcon, 'Septagon'];
+        case 8:
+            return [OcatgonIcon, 'Octagon'];
         default:
-            return OcatgonIcon;
+            return [OcatgonIcon, 'Polygon'];
     }
 }
 
 const PolygonDetails: React.FC<ListComponentProps<PolygonZone>> = ({ object, ...props }) => {
-    const Icon = getIcon(object.sides);
+    const [Icon, name] = getIconAndName(object.sides);
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
-            name={NAME}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
+            name={name}
             object={object}
             {...props}
         />

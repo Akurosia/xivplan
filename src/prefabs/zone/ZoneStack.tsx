@@ -1,19 +1,27 @@
-import React, { useMemo } from 'react';
-import { Circle } from 'react-konva';
+import Konva from 'konva';
+import { CircleConfig } from 'konva/lib/shapes/Circle';
+import React, { useRef } from 'react';
+import { Circle, Group } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
+import { useScene } from '../../SceneProvider';
 import Icon from '../../assets/zone/stack.svg?react';
+import { getCanvasCoord } from '../../coord';
 import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
+import { ForegroundPortal } from '../../render/Portals';
 import { LayerName } from '../../render/layers';
-import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, sceneVars, SELECTED_PROPS } from '../../render/sceneTheme';
-import { CircleZone, ObjectType } from '../../scene';
+import { ObjectType, StackZone } from '../../scene';
+import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
+import { useKonvaCache } from '../../useKonvaCache';
 import { usePanelDrag } from '../../usePanelDrag';
 import { HideGroup } from '../HideGroup';
 import { PrefabIcon } from '../PrefabIcon';
 import { RadiusObjectContainer } from '../RadiusObjectContainer';
-import { useShowHighlight } from '../highlight';
+import { useHighlightProps, useOverrideProps } from '../highlight';
+import { Orb } from './Orb';
 import { ChevronTail } from './shapes';
+import { getStackCircleProps } from './stackUtil';
 import { getArrowStyle, getZoneStyle } from './style';
 
 const NAME = 'Stack';
@@ -40,7 +48,7 @@ export const ZoneStack: React.FC = () => {
     );
 };
 
-registerDropHandler<CircleZone>(ObjectType.Stack, (object, position) => {
+registerDropHandler<StackZone>(ObjectType.Stack, (object, position) => {
     return {
         type: 'add',
         object: {
@@ -48,49 +56,50 @@ registerDropHandler<CircleZone>(ObjectType.Stack, (object, position) => {
             color: DEFAULT_AOE_COLOR,
             opacity: DEFAULT_AOE_OPACITY,
             radius: DEFAULT_RADIUS,
+            count: 1,
             ...object,
             ...position,
-        },
+        } as StackZone,
     };
 });
 
 const CHEVRON_ANGLES = [45, 135, 225, 315];
 
-interface StackRendererProps extends RendererProps<CircleZone> {
+interface StackRendererProps extends RendererProps<StackZone> {
     radius: number;
 }
 
 const StackRenderer: React.FC<StackRendererProps> = ({ object, radius }) => {
-    const showHighlight = useShowHighlight(object);
-    const ring = useMemo(
-        () => getZoneStyle(object.color, object.opacity, radius * 2),
-        [object.color, object.opacity, radius],
-    );
-    const arrow = useMemo(() => getArrowStyle(object.color, object.opacity * 2), [object.color, object.opacity]);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
+    const ring = getZoneStyle(object.color, object.opacity, radius * 2);
+    const arrow = getArrowStyle(object.color, object.opacity * 2);
 
-    const { cx, cw, ch, ca } = useMemo(() => {
-        return {
-            cx: radius * 0.6,
-            cw: radius * 0.5,
-            ch: radius * 0.325,
-            ca: 40,
-        };
-    }, [radius]);
+    const cx = radius * 0.6;
+    const cw = radius * 0.5;
+    const ch = radius * 0.325;
+    const ca = 40;
+
+    const showOrbs = !object.hide && object.count > 1;
 
     return (
         <>
-            {showHighlight && <Circle radius={radius + ring.strokeWidth} {...SELECTED_PROPS} opacity={0.35} />}
+            {highlightProps && <Circle radius={radius + ring.strokeWidth} {...highlightProps} {...overrideProps} />}
 
-            <HideGroup>
+            <HideGroup {...overrideProps}>
                 <Circle radius={radius} {...ring} opacity={0.75} fill="transparent" />
-                <ChevronTail
-                    rotation={180}
-                    chevronAngle={ca}
-                    width={cw * 0.6}
-                    height={ch * 0.6}
-                    {...arrow}
-                    listening={false}
-                />
+
+                {object.count === 1 && (
+                    <ChevronTail
+                        rotation={180}
+                        chevronAngle={ca}
+                        width={cw * 0.6}
+                        height={ch * 0.6}
+                        {...arrow}
+                        listening={false}
+                    />
+                )}
+                {showOrbs && <StackOrbs object={object} radius={radius} ring={ring} orb={arrow} />}
 
                 {CHEVRON_ANGLES.map((r, i) => (
                     <ChevronTail
@@ -108,7 +117,41 @@ const StackRenderer: React.FC<StackRendererProps> = ({ object, radius }) => {
     );
 };
 
-const StackContainer: React.FC<RendererProps<CircleZone>> = ({ object }) => {
+interface StackOrbsProps extends StackRendererProps {
+    ring: ReturnType<typeof getZoneStyle>;
+    orb: CircleConfig;
+}
+
+const StackOrbs: React.FC<StackOrbsProps> = ({ object, radius, ring }) => {
+    const { scene } = useScene();
+    const center = getCanvasCoord(scene, object);
+
+    const orbRadius = Math.min(radius * 0.25, 40);
+    const orbs = getStackCircleProps(orbRadius, object.count);
+
+    const shapeRef = useRef<Konva.Group>(null);
+
+    useKonvaCache(shapeRef, [object, radius]);
+
+    return (
+        <ForegroundPortal>
+            <Group ref={shapeRef} {...center} opacity={object.opacity / 40} listening={false}>
+                <Circle
+                    radius={orbRadius}
+                    {...ring}
+                    strokeWidth={ring.strokeWidth / 2}
+                    opacity={0.35}
+                    fill="transparent"
+                />
+                {orbs.map((props, i) => (
+                    <Orb key={i} fill={object.color} {...props} />
+                ))}
+            </Group>
+        </ForegroundPortal>
+    );
+};
+
+const StackContainer: React.FC<RendererProps<StackZone>> = ({ object }) => {
     return (
         <RadiusObjectContainer object={object}>
             {({ radius }) => <StackRenderer object={object} radius={radius} />}
@@ -116,12 +159,12 @@ const StackContainer: React.FC<RendererProps<CircleZone>> = ({ object }) => {
     );
 };
 
-registerRenderer<CircleZone>(ObjectType.Stack, LayerName.Ground, StackContainer);
+registerRenderer<StackZone>(ObjectType.Stack, LayerName.Ground, StackContainer);
 
-const StackDetails: React.FC<ListComponentProps<CircleZone>> = ({ object, ...props }) => {
+const StackDetails: React.FC<ListComponentProps<StackZone>> = ({ object, ...props }) => {
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
             name={NAME}
             object={object}
             {...props}
@@ -129,4 +172,4 @@ const StackDetails: React.FC<ListComponentProps<CircleZone>> = ({ object, ...pro
     );
 };
 
-registerListComponent<CircleZone>(ObjectType.Stack, StackDetails);
+registerListComponent<StackZone>(ObjectType.Stack, StackDetails);

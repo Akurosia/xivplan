@@ -30,29 +30,27 @@ import {
     typographyStyles,
 } from '@fluentui/react-components';
 import { AddFilled, ArrowSwapRegular, DeleteFilled, DeleteRegular, bundleIcon } from '@fluentui/react-icons';
-import React, { HTMLAttributes, useCallback, useMemo, useState } from 'react';
+import React, { HTMLAttributes, RefAttributes, useState } from 'react';
 import { HotkeyBlockingDialogBody } from './HotkeyBlockingDialogBody';
 import { useScene } from './SceneProvider';
 import { ScenePreview } from './render/SceneRenderer';
-import { MIN_STAGE_WIDTH } from './render/sceneTheme';
 import { Scene } from './scene';
+import { MIN_STAGE_WIDTH } from './theme';
+import { useCancelConnectionSelection } from './useEditMode';
 
 export const StepSelect: React.FC = () => {
     const classes = useStyles();
     const { scene, stepIndex, dispatch } = useScene();
-    const steps = useMemo(() => scene.steps.map((_, i) => i), [scene.steps]);
+    const cancelConnectionSelection = useCancelConnectionSelection();
+    const steps = scene.steps.map((_, i) => i);
 
-    const handleTabSelect = useCallback(
-        (event: SelectTabEvent, data: SelectTabData) => {
-            const index = data.value as number;
-            dispatch({ type: 'setStep', index });
-        },
-        [dispatch],
-    );
+    const handleTabSelect = (event: SelectTabEvent, data: SelectTabData) => {
+        cancelConnectionSelection();
+        const index = data.value as number;
+        dispatch({ type: 'setStep', index });
+    };
 
-    const maxWidth = useMemo(() => {
-        return scene.arena.width + scene.arena.padding * 2;
-    }, [scene]);
+    const maxWidth = scene.arena.width + scene.arena.padding * 2;
 
     return (
         <div className={classes.root} style={{ maxWidth }}>
@@ -103,10 +101,16 @@ const StepButton: React.FC<StepButtonProps> = ({ index }) => {
 
 const AddStepButton: React.FC<ButtonProps> = (props) => {
     const { dispatch } = useScene();
+    const cancelConnectionSelection = useCancelConnectionSelection();
+
+    const handleAddStep = () => {
+        cancelConnectionSelection();
+        dispatch({ type: 'addStep' });
+    };
 
     return (
         <Tooltip content="Add new step" relationship="label" withArrow>
-            <Button icon={<AddFilled />} appearance="subtle" onClick={() => dispatch({ type: 'addStep' })} {...props} />
+            <Button icon={<AddFilled />} appearance="subtle" onClick={handleAddStep} {...props} />
         </Tooltip>
     );
 };
@@ -115,7 +119,13 @@ const DeleteIcon = bundleIcon(DeleteFilled, DeleteRegular);
 
 const RemoveStepButton: React.FC = () => {
     const { scene, stepIndex, dispatch } = useScene();
+    const cancelConnectionSelection = useCancelConnectionSelection();
     const stepText = getStepText(stepIndex);
+
+    const handleDeleteStep = () => {
+        cancelConnectionSelection();
+        dispatch({ type: 'removeStep', index: stepIndex });
+    };
 
     return (
         <Tooltip content={`Delete step ${stepText}`} relationship="label" withArrow>
@@ -123,7 +133,7 @@ const RemoveStepButton: React.FC = () => {
                 icon={<DeleteIcon />}
                 appearance="subtle"
                 disabled={scene.steps.length < 2}
-                onClick={() => dispatch({ type: 'removeStep', index: stepIndex })}
+                onClick={handleDeleteStep}
             />
         </Tooltip>
     );
@@ -155,9 +165,9 @@ const ReoderStepsDialogContent: React.FC = () => {
     const [sceneSnapshot] = useState<Scene>(scene);
     const [order, setOrder] = useState<StepOrderItem[]>(scene.steps.map((_, i) => getStepOrderItem(i)));
 
-    const applyOrder = useCallback(() => {
+    const applyOrder = () => {
         dispatch({ type: 'reoderSteps', order: order.map((x) => x.index) });
-    }, [order, dispatch]);
+    };
 
     return (
         <>
@@ -215,22 +225,19 @@ const ReorderStepsList: React.FC<ReorderStepsListProps> = ({ scene, order, onOrd
         }),
     );
 
-    const handleDragEnd = useCallback(
-        (event: DragEndEvent) => {
-            const { active, over } = event;
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
 
-            if (!over || active.id === over.id) {
-                return;
-            }
+        if (!over || active.id === over.id) {
+            return;
+        }
 
-            const oldIndex = order.findIndex((x) => x.id === active.id);
-            const newIndex = order.findIndex((x) => x.id === over.id);
-            const newOrder = arrayMove(order, oldIndex, newIndex);
+        const oldIndex = order.findIndex((x) => x.id === active.id);
+        const newIndex = order.findIndex((x) => x.id === over.id);
+        const newOrder = arrayMove(order, oldIndex, newIndex);
 
-            onOrderChange(newOrder);
-        },
-        [order, onOrderChange],
-    );
+        onOrderChange(newOrder);
+    };
 
     return (
         <div className={classes.dialogList}>
@@ -250,7 +257,7 @@ const ReorderStepsList: React.FC<ReorderStepsListProps> = ({ scene, order, onOrd
     );
 };
 
-interface StepItemProps extends HTMLAttributes<HTMLDivElement> {
+interface StepItemProps extends HTMLAttributes<HTMLDivElement>, RefAttributes<HTMLDivElement> {
     scene: Scene;
     step: StepOrderItem;
 }
@@ -274,7 +281,7 @@ const ReorderableStepItem: React.FC<StepItemProps> = ({ scene, step }) => {
     );
 };
 
-const StepItem = React.forwardRef<HTMLDivElement, StepItemProps>(({ scene, step, className, ...props }, ref) => {
+const StepItem: React.FC<StepItemProps> = ({ ref, scene, step, className, ...props }) => {
     const classes = useStyles();
     const stepText = `Step ${getStepText(step.index)}`;
 
@@ -291,8 +298,7 @@ const StepItem = React.forwardRef<HTMLDivElement, StepItemProps>(({ scene, step,
             />
         </div>
     );
-});
-StepItem.displayName = 'StepItem';
+};
 
 const useStyles = makeStyles({
     root: {

@@ -1,6 +1,8 @@
-import { RefObject, useContext, useEffect, useId } from 'react';
+import { RefObject, useContext, useEffect } from 'react';
 import { HotkeyCallback, Options, useHotkeys as useHotkeysBase, useHotkeysContext } from 'react-hotkeys-hook';
 import { HotkeyHelpContext, HotkeyInfo } from './HotkeyHelpContext';
+import { useCancelConnectionSelection } from './useEditMode';
+import { rotateArray } from './util';
 
 export enum HotkeyScopes {
     AlwaysEnabled = 'alwaysEnabled', // Workaround for https://github.com/JohannesKlauss/react-hotkeys-hook/issues/908
@@ -48,40 +50,47 @@ export function useHotkeys<T extends HTMLElement>(
 
 export function useHotkeyHelp(info: HotkeyInfo): void {
     const map = useContext(HotkeyHelpContext);
-    const id = useId();
     useEffect(() => {
-        if (!info.category || !info.help) {
+        if (!info.keys || !info.category || !info.help) {
             return;
         }
 
-        map.set(id, info);
+        const id = `${info.keys}-${info.category}-${info.help}`;
+        map.set(id, { ...info, sortKey: getSortKey(info) });
 
         return () => {
             map.delete(id);
         };
-    }, [map, id, info]);
+    }, [map, info]);
 }
 
 export function useRegisteredHotkeys(): HotkeyInfo[] {
     const map = useContext(HotkeyHelpContext);
     return [...map.values()].sort((a, b) => {
-        const result = a.category.localeCompare(b.category);
-        if (result !== 0) {
-            return result;
-        }
-
-        return a.keys.localeCompare(b.keys);
+        return a.sortKey.localeCompare(b.sortKey);
     });
 }
 
 export function useHotkeyBlocker() {
     const { disableScope, enableScope } = useHotkeysContext();
+    const cancelConnectionSelection = useCancelConnectionSelection();
 
     return useEffect(() => {
         disableScope(HotkeyScopes.Default);
+        cancelConnectionSelection();
 
         return () => {
             enableScope(HotkeyScopes.Default);
         };
-    }, [disableScope, enableScope]);
+    }, [disableScope, enableScope, cancelConnectionSelection]);
+}
+
+function getSortKey(info: HotkeyInfo) {
+    let keys = info.keys.split('+').map((k) => k.trim().toLowerCase());
+    const nonModifierIdx = keys.findIndex((k) => k !== 'ctrl' && k !== 'shift' && k !== 'alt');
+    if (nonModifierIdx > 0) {
+        keys = rotateArray(keys, nonModifierIdx);
+    }
+
+    return [info.category, ...keys].join('+');
 }

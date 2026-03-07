@@ -1,16 +1,17 @@
 import { makeStyles, tokens } from '@fluentui/react-components';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { EditModeProvider } from './EditModeProvider';
 import { RegularHotkeyHandler } from './HotkeyHandler';
 import { MainToolbar } from './MainToolbar';
 import { PanelDragProvider } from './PanelDragProvider';
+import { SceneLoadErrorNotifier } from './SceneLoadErrorNotifier';
 import { useScene } from './SceneProvider';
 import { SelectionProvider } from './SelectionProvider';
 import { StepSelect } from './StepSelect';
 import { DetailsPanel } from './panel/DetailsPanel';
 import { MainPanel } from './panel/MainPanel';
 import { SceneRenderer } from './render/SceneRenderer';
-import { MIN_STAGE_WIDTH } from './render/sceneTheme';
+import { MIN_STAGE_WIDTH } from './theme';
 import { useIsDirty } from './useIsDirty';
 import { removeFileExtension } from './util';
 
@@ -28,12 +29,15 @@ export const MainPage: React.FC = () => {
 
 const MainPageContent: React.FC = () => {
     const classes = useStyles();
-
-    usePageTitle();
+    const title = usePageTitle();
 
     return (
         <>
+            <title>{title}</title>
+
             <RegularHotkeyHandler />
+            <SceneLoadErrorNotifier />
+
             <MainToolbar />
 
             {/* TODO: make panel collapsable */}
@@ -57,17 +61,15 @@ function usePageTitle() {
     const { source } = useScene();
     const isDirty = useIsDirty();
 
-    useEffect(() => {
-        let title = TITLE;
-        if (source) {
-            title += ': ';
-            title += removeFileExtension(source?.name);
-        }
-        if (isDirty) {
-            title += ' ●';
-        }
-        document.title = title;
-    }, [source, isDirty]);
+    let title = TITLE;
+    if (source) {
+        title += ': ';
+        title += removeFileExtension(source?.name);
+    }
+    if (isDirty) {
+        title += ' ●';
+    }
+    return title;
 }
 
 const useStyles = makeStyles({

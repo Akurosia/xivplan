@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Circle, Group, Rect } from 'react-konva';
 import Icon from '../../assets/zone/line.svg?react';
-import { getPointerAngle, snapAngle } from '../../coord';
+import { getAbsoluteRotation, getBaseFacingRotation, getPointerAngle, snapAngle } from '../../coord';
 import { getResizeCursor } from '../../cursor';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
 import { DetailsItem } from '../../panel/DetailsItem';
@@ -9,22 +9,18 @@ import { ListComponentProps, registerListComponent } from '../../panel/ListCompo
 import { LayerName } from '../../render/layers';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
 import { ActivePortal } from '../../render/Portals';
-import {
-    CENTER_DOT_RADIUS,
-    DEFAULT_AOE_COLOR,
-    DEFAULT_AOE_OPACITY,
-    sceneVars,
-    SELECTED_PROPS,
-} from '../../render/sceneTheme';
-import { LineZone, ObjectType } from '../../scene';
+import { LineZone, ObjectType, Scene } from '../../scene';
 import { useScene } from '../../SceneProvider';
+import { useIsDragging } from '../../selection';
+import { CENTER_DOT_RADIUS, DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
+import { clampRotation, mod360 } from '../../util';
 import { distance, getDistanceFromLine, VEC_ZERO, vecAtAngle } from '../../vector';
 import { MIN_LINE_LENGTH, MIN_LINE_WIDTH } from '../bounds';
 import { CONTROL_POINT_BORDER_COLOR, createControlPointManager, HandleFuncProps, HandleStyle } from '../ControlPoint';
 import { DraggableObject } from '../DraggableObject';
 import { HideGroup } from '../HideGroup';
-import { useShowHighlight, useShowResizer } from '../highlight';
+import { useHighlightProps, useOverrideProps, useShowResizer } from '../highlight';
 import { PrefabIcon } from '../PrefabIcon';
 import { getZoneStyle } from './style';
 
@@ -77,7 +73,7 @@ registerDropHandler<LineZone>(ObjectType.Line, (object, position) => {
 const LineDetails: React.FC<ListComponentProps<LineZone>> = ({ object, ...props }) => {
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
             name={NAME}
             object={object}
             {...props}
@@ -111,19 +107,20 @@ function getLength(object: LineZone, { pointerPos, activeHandleId }: HandleFuncP
     return object.length;
 }
 
-function getRotation(object: LineZone, { pointerPos, activeHandleId }: HandleFuncProps) {
+function getRotation(scene: Readonly<Scene>, object: LineZone, { pointerPos, activeHandleId }: HandleFuncProps) {
     if (pointerPos && activeHandleId === HandleId.Length) {
         const angle = getPointerAngle(pointerPos);
-        return snapAngle(angle, ROTATE_SNAP_DIVISION, ROTATE_SNAP_TOLERANCE);
+        const baseRotation = getBaseFacingRotation(scene, object);
+        return snapAngle(angle - baseRotation, ROTATE_SNAP_DIVISION, ROTATE_SNAP_TOLERANCE) + baseRotation;
     }
 
-    return object.rotation;
+    return getAbsoluteRotation(scene, object);
 }
 
-function getWidth(object: LineZone, { pointerPos, activeHandleId }: HandleFuncProps) {
+function getWidth(scene: Readonly<Scene>, object: LineZone, { pointerPos, activeHandleId }: HandleFuncProps) {
     if (pointerPos && activeHandleId == HandleId.Width) {
         const start = VEC_ZERO;
-        const end = vecAtAngle(object.rotation);
+        const end = vecAtAngle(getAbsoluteRotation(scene, object));
         const distance = getDistanceFromLine(start, end, pointerPos);
 
         return Math.max(MIN_LINE_WIDTH, Math.round(distance * 2));
@@ -133,10 +130,10 @@ function getWidth(object: LineZone, { pointerPos, activeHandleId }: HandleFuncPr
 }
 
 const LineControlPoints = createControlPointManager<LineZone, LineState>({
-    handleFunc: (object, handle) => {
+    handleFunc: (scene, object, handle) => {
         const length = getLength(object, handle) + OUTSET;
-        const width = getWidth(object, handle);
-        const rotation = getRotation(object, handle);
+        const width = getWidth(scene, object, handle);
+        const rotation = getRotation(scene, object, handle);
 
         const x = width / 2;
         const y = -length / 2;
@@ -148,10 +145,10 @@ const LineControlPoints = createControlPointManager<LineZone, LineState>({
         ];
     },
     getRotation: getRotation,
-    stateFunc: (object, handle) => {
+    stateFunc: (scene, object, handle) => {
         const length = getLength(object, handle);
-        const width = getWidth(object, handle);
-        const rotation = getRotation(object, handle);
+        const width = getWidth(scene, object, handle);
+        const rotation = getRotation(scene, object, handle);
 
         return { length, width, rotation };
     },
@@ -185,11 +182,9 @@ interface LineRendererProps extends RendererProps<LineZone> {
 }
 
 const LineRenderer: React.FC<LineRendererProps> = ({ object, length, width, rotation, isDragging }) => {
-    const showHighlight = useShowHighlight(object);
-    const style = useMemo(
-        () => getZoneStyle(object.color, object.opacity, Math.min(length, width), object.hollow),
-        [object.color, object.opacity, length, width, object.hollow],
-    );
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
+    const style = getZoneStyle(object.color, object.opacity, Math.min(length, width), object.hollow);
 
     const x = -width / 2;
     const y = -length;
@@ -198,8 +193,8 @@ const LineRenderer: React.FC<LineRendererProps> = ({ object, length, width, rota
     const highlightLength = length + highlightOffset;
 
     return (
-        <Group rotation={rotation}>
-            {showHighlight && (
+        <Group rotation={rotation} {...overrideProps}>
+            {highlightProps && (
                 <Rect
                     x={x}
                     y={y}
@@ -207,7 +202,7 @@ const LineRenderer: React.FC<LineRendererProps> = ({ object, length, width, rota
                     height={highlightLength}
                     offsetX={highlightOffset / 2}
                     offsetY={highlightOffset / 2}
-                    {...SELECTED_PROPS}
+                    {...highlightProps}
                 />
             )}
             <HideGroup>
@@ -220,32 +215,34 @@ const LineRenderer: React.FC<LineRendererProps> = ({ object, length, width, rota
 };
 
 function stateChanged(object: LineZone, state: LineState) {
-    return state.length !== object.length || state.rotation !== object.rotation || state.width !== object.width;
+    return (
+        state.length !== object.length ||
+        mod360(state.rotation) !== mod360(object.rotation) ||
+        state.width !== object.width
+    );
 }
 
 const LineContainer: React.FC<RendererProps<LineZone>> = ({ object }) => {
-    const { dispatch } = useScene();
+    const { dispatch, scene } = useScene();
     const showResizer = useShowResizer(object);
     const [resizing, setResizing] = useState(false);
-    const [dragging, setDragging] = useState(false);
+    const dragging = useIsDragging(object);
 
-    const updateObject = useCallback(
-        (state: LineState) => {
-            state.rotation = Math.round(state.rotation);
-            state.width = Math.round(state.width);
+    const updateObject = (state: LineState) => {
+        const baseRotation = getBaseFacingRotation(scene, object);
+        state.rotation = clampRotation(state.rotation - baseRotation);
+        state.width = Math.round(state.width);
 
-            if (!stateChanged(object, state)) {
-                return;
-            }
+        if (!stateChanged(object, state)) {
+            return;
+        }
 
-            dispatch({ type: 'update', value: { ...object, ...state } });
-        },
-        [dispatch, object],
-    );
+        dispatch({ type: 'update', value: { ...object, ...state } });
+    };
 
     return (
         <ActivePortal isActive={dragging || resizing}>
-            <DraggableObject object={object} onActive={setDragging}>
+            <DraggableObject object={object}>
                 <LineControlPoints
                     object={object}
                     onActive={setResizing}

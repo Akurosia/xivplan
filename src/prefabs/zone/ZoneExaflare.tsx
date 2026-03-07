@@ -1,5 +1,5 @@
 import { Vector2d } from 'konva/lib/types';
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Circle, Group } from 'react-konva';
 import Icon from '../../assets/zone/exaflare.svg?react';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
@@ -7,17 +7,11 @@ import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { LayerName } from '../../render/layers';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
-import {
-    CENTER_DOT_RADIUS,
-    DEFAULT_AOE_COLOR,
-    DEFAULT_AOE_OPACITY,
-    sceneVars,
-    SELECTED_PROPS,
-} from '../../render/sceneTheme';
 import { ExaflareZone, ObjectType } from '../../scene';
+import { CENTER_DOT_RADIUS, DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
 import { HideGroup } from '../HideGroup';
-import { useShowHighlight } from '../highlight';
+import { useHighlightProps, useOverrideProps } from '../highlight';
 import { PrefabIcon } from '../PrefabIcon';
 import { RadiusObjectContainer } from '../RadiusObjectContainer';
 import { EXAFLARE_SPACING_DEFAULT } from './constants';
@@ -87,21 +81,17 @@ interface ExaflareRendererProps extends RendererProps<ExaflareZone> {
 }
 
 const ExaflareRenderer: React.FC<ExaflareRendererProps> = ({ object, radius, rotation, isDragging }) => {
-    const showHighlight = useShowHighlight(object);
-    const style = useMemo(
-        () => getZoneStyle(object.color, object.opacity, radius * 2),
-        [object.color, object.opacity, radius],
-    );
-    const arrow = useMemo(() => getArrowStyle(object.color, object.opacity * 3), [object.color, object.opacity]);
-    const trail = useMemo(
-        () => getTrailPositions(radius, object.length, object.spacing),
-        [radius, object.length, object.spacing],
-    );
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
+    const style = getZoneStyle(object.color, object.opacity, radius * 2);
+
+    const arrow = getArrowStyle(object.color, object.opacity * 3);
+    const trail = getTrailPositions(radius, object.length, object.spacing);
     const dashSize = getDashSize(radius);
 
     return (
         <>
-            <Group rotation={rotation}>
+            <Group rotation={rotation} {...overrideProps}>
                 <HideGroup>
                     {trail.map((point, i) => (
                         <Circle
@@ -118,7 +108,7 @@ const ExaflareRenderer: React.FC<ExaflareRendererProps> = ({ object, radius, rot
                     ))}
                 </HideGroup>
 
-                {showHighlight && <Circle radius={radius + style.strokeWidth / 2} {...SELECTED_PROPS} />}
+                {highlightProps && <Circle radius={radius + style.strokeWidth / 2} {...highlightProps} />}
 
                 <HideGroup>
                     <Circle radius={radius} {...style} />
@@ -150,7 +140,7 @@ registerRenderer<ExaflareZone>(ObjectType.Exaflare, LayerName.Ground, ExaflareCo
 const ExaflareDetails: React.FC<ListComponentProps<ExaflareZone>> = ({ object, ...props }) => {
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
             name={NAME}
             object={object}
             {...props}

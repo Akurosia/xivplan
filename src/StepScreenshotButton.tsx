@@ -27,6 +27,8 @@ import { ObjectLoadingContext } from './ObjectLoadingContext';
 import { ObjectLoadingProvider } from './ObjectLoadingProvider';
 import { ScenePreview } from './render/SceneRenderer';
 import { useScene } from './SceneProvider';
+import { ToastDismissButton } from './ToastDismissButton';
+import { useCancelConnectionSelection } from './useEditMode';
 import { useHotkeys } from './useHotkeys';
 
 const SCREENSHOT_TIMEOUT = 1000;
@@ -38,54 +40,51 @@ export const StepScreenshotButton: React.FC<StepScreenshotButtonProps> = (props)
     const [scale, setScale] = useLocalStorage('screenshotPixelRatio', 1);
     const [takingScreenshot, setTakingScreenshot] = useState(false);
     const { dispatchToast } = useToastController();
+    const cancelConnectionSelection = useCancelConnectionSelection();
 
     const checkedValues: Record<string, string[]> = {
         scale: [scale?.toString() ?? '1'],
     };
 
-    const handleCheckedValueChanged = useCallback(
-        (e: MenuCheckedValueChangeEvent, data: MenuCheckedValueChangeData) => {
-            if (data.name === 'scale') {
-                setScale(parseInt(data.checkedItems?.[0] ?? '1'));
-            }
-        },
-        [setScale],
-    );
+    const handleCheckedValueChanged = (e: MenuCheckedValueChangeEvent, data: MenuCheckedValueChangeData) => {
+        if (data.name === 'scale') {
+            setScale(parseInt(data.checkedItems?.[0] ?? '1'));
+        }
+    };
 
-    const handleScreenshotDone = useCallback(
-        (error?: unknown) => {
-            setTakingScreenshot(false);
+    const handleScreenshotDone = (error?: unknown) => {
+        setTakingScreenshot(false);
 
-            if (error) {
-                dispatchToast(<MessageToast title="Error" message={error} />, { intent: 'error' });
-            } else {
-                dispatchToast(<ScreenshotSuccessToast />, { intent: 'success', timeout: 2000 });
-            }
-        },
-        [dispatchToast, setTakingScreenshot],
-    );
+        if (error) {
+            dispatchToast(<MessageToast title="Error" message={error} />, { intent: 'error' });
+        } else {
+            dispatchToast(<ScreenshotSuccessToast />, { intent: 'success', timeout: 2000 });
+        }
+    };
 
     // Cancel the screenshot if it takes too long so it can't get stuck.
-    const handleTimeout = useCallback(() => {
+    const handleTimeout = () => {
         if (!takingScreenshot) {
             return;
         }
 
         setTakingScreenshot(false);
         dispatchToast(<MessageToast title="Error" message="Screenshot timed out" />, { intent: 'error' });
-    }, [takingScreenshot, dispatchToast, setTakingScreenshot]);
+    };
 
     const [, , startTimeout] = useTimeoutFn(handleTimeout, SCREENSHOT_TIMEOUT);
 
-    const startScreenshot = useCallback(() => {
+    const startScreenshot = () => {
+        cancelConnectionSelection();
         setTakingScreenshot(true);
         startTimeout();
-    }, [setTakingScreenshot, startTimeout]);
+    };
 
     useHotkeys(
         'ctrl+shift+c',
         { category: '7.Steps', help: 'Screenshot current step' },
         (ev) => {
+            cancelConnectionSelection();
             setTakingScreenshot(true);
             ev.preventDefault();
         },
@@ -141,7 +140,7 @@ export const StepScreenshotButton: React.FC<StepScreenshotButtonProps> = (props)
 const ScreenshotSuccessToast = () => {
     return (
         <Toast>
-            <ToastTitle>Screenshot copied to clipboard</ToastTitle>
+            <ToastTitle action={<ToastDismissButton />}>Screenshot copied to clipboard</ToastTitle>
         </Toast>
     );
 };
@@ -158,12 +157,14 @@ const ScreenshotComponent: React.FC<ScreenshotComponentProps> = ({ scale, onScre
     const [frozenStepIndex] = useState(stepIndex);
     const ref = useRef<Konva.Stage>(null);
 
+    // https://github.com/reactwg/react-compiler/discussions/18
     const takeScreenshot = useCallback(async () => {
-        try {
-            if (!ref.current) {
-                throw new Error('Stage missing');
-            }
+        if (!ref.current) {
+            onScreenshotDone(new Error('Stage missing'));
+            return;
+        }
 
+        try {
             await copyToClipboard(ref.current, scale);
             onScreenshotDone();
         } catch (ex) {
@@ -175,7 +176,7 @@ const ScreenshotComponent: React.FC<ScreenshotComponentProps> = ({ scale, onScre
     // to load resources have reported that they are loading.
     const [firstRender, setFirstRender] = useState(true);
     useEffect(() => {
-        setFirstRender(false);
+        setTimeout(() => setFirstRender(false));
     }, [setFirstRender]);
 
     // Avoid double screenshot in development builds.

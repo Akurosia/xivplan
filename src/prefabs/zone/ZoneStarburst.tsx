@@ -1,5 +1,6 @@
+import { ShapeConfig } from 'konva/lib/Shape';
 import { CircleConfig } from 'konva/lib/shapes/Circle';
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Circle, Group, Rect } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
 import Icon from '../../assets/zone/starburst.svg?react';
@@ -7,19 +8,13 @@ import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
 import { LayerName } from '../../render/layers';
-import {
-    CENTER_DOT_RADIUS,
-    DEFAULT_AOE_COLOR,
-    DEFAULT_AOE_OPACITY,
-    sceneVars,
-    SELECTED_PROPS,
-} from '../../render/sceneTheme';
 import { ObjectType, StarburstZone } from '../../scene';
+import { CENTER_DOT_RADIUS, DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
 import { HideGroup } from '../HideGroup';
 import { PrefabIcon } from '../PrefabIcon';
 import { MIN_STARBURST_SPOKE_WIDTH } from '../bounds';
-import { useShowHighlight } from '../highlight';
+import { useHighlightProps, useOverrideProps } from '../highlight';
 import { StarburstControlContainer } from './StarburstContainer';
 import { getZoneStyle } from './style';
 
@@ -69,15 +64,22 @@ interface StarburstConfig extends CircleConfig {
     radius: number;
     spokes: number;
     spokeWidth: number;
-    showHighlight: boolean;
+    highlightProps?: ShapeConfig;
 }
 
 function getOddRotations(spokes: number) {
     return Array.from({ length: spokes }).map((_, i) => 180 + (i / spokes) * 360);
 }
 
-const StarburstOdd: React.FC<StarburstConfig> = ({ rotation, radius, spokes, spokeWidth, showHighlight, ...props }) => {
-    const items = useMemo(() => getOddRotations(spokes), [spokes]);
+const StarburstOdd: React.FC<StarburstConfig> = ({
+    rotation,
+    radius,
+    spokes,
+    spokeWidth,
+    highlightProps,
+    ...props
+}) => {
+    const items = getOddRotations(spokes);
 
     const rect = {
         offsetX: spokeWidth / 2,
@@ -92,7 +94,7 @@ const StarburstOdd: React.FC<StarburstConfig> = ({ rotation, radius, spokes, spo
 
     return (
         <Group rotation={rotation}>
-            {showHighlight &&
+            {highlightProps &&
                 items.map((r, i) => (
                     <Rect
                         key={i}
@@ -100,7 +102,7 @@ const StarburstOdd: React.FC<StarburstConfig> = ({ rotation, radius, spokes, spo
                         offsetX={highlightWidth / 2}
                         width={highlightWidth}
                         height={highlightHeight}
-                        {...SELECTED_PROPS}
+                        {...highlightProps}
                     />
                 ))}
 
@@ -123,10 +125,10 @@ const StarburstEven: React.FC<StarburstConfig> = ({
     radius,
     spokes,
     spokeWidth,
-    showHighlight,
+    highlightProps,
     ...props
 }) => {
-    const items = useMemo(() => getEvenRotations(spokes), [spokes]);
+    const items = getEvenRotations(spokes);
 
     const rect = {
         offsetX: spokeWidth / 2,
@@ -142,7 +144,7 @@ const StarburstEven: React.FC<StarburstConfig> = ({
 
     return (
         <Group rotation={rotation}>
-            {showHighlight &&
+            {highlightProps &&
                 items.map((r, i) => (
                     <Rect
                         key={i}
@@ -151,7 +153,7 @@ const StarburstEven: React.FC<StarburstConfig> = ({
                         offsetY={highlightHeight / 2}
                         width={highlightWidth}
                         height={highlightHeight}
-                        {...SELECTED_PROPS}
+                        {...highlightProps}
                     />
                 ))}
 
@@ -172,11 +174,9 @@ interface StarburstRendererProps extends RendererProps<StarburstZone> {
 }
 
 const StarburstRenderer: React.FC<StarburstRendererProps> = ({ object, radius, rotation, spokeWidth, isDragging }) => {
-    const showSelected = useShowHighlight(object);
-    const style = useMemo(
-        () => getZoneStyle(object.color, object.opacity, object.spokeWidth * 2),
-        [object.color, object.opacity, object.spokeWidth],
-    );
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
+    const style = getZoneStyle(object.color, object.opacity, object.spokeWidth * 2);
 
     const config: StarburstConfig = {
         ...style,
@@ -184,11 +184,11 @@ const StarburstRenderer: React.FC<StarburstRendererProps> = ({ object, radius, r
         rotation,
         spokeWidth,
         spokes: object.spokes,
-        showHighlight: showSelected,
+        highlightProps,
     };
 
     return (
-        <Group>
+        <Group {...overrideProps}>
             {object.spokes % 2 === 0 ? <StarburstEven {...config} /> : <StarburstOdd {...config} />}
 
             {isDragging && <Circle radius={CENTER_DOT_RADIUS} fill={style.stroke} />}
@@ -209,7 +209,7 @@ registerRenderer<StarburstZone>(ObjectType.Starburst, LayerName.Ground, Starburs
 const StarburstDetails: React.FC<ListComponentProps<StarburstZone>> = ({ object, ...props }) => {
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
             name={NAME}
             object={object}
             {...props}

@@ -11,16 +11,18 @@ import {
     Divider,
     makeStyles,
     mergeClasses,
+    NavDrawer,
+    NavDrawerBody,
+    NavDrawerProps,
+    NavItem,
+    NavSectionHeader,
     shorthands,
     tokens,
-    Tree,
-    TreeItem,
-    TreeItemLayout,
     typographyStyles,
+    useArrowNavigationGroup,
 } from '@fluentui/react-components';
 import { OptionsFilled } from '@fluentui/react-icons';
-import React, { Dispatch, MouseEventHandler, SetStateAction, useCallback, useMemo, useState } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
+import React, { ButtonHTMLAttributes, Dispatch, MouseEventHandler, SetStateAction, useRef, useState } from 'react';
 import { useAsync, useCounter, useLocalStorage, useSessionStorage } from 'react-use';
 import { HotkeyBlockingDialogBody } from '../HotkeyBlockingDialogBody';
 import { useScene } from '../SceneProvider';
@@ -47,22 +49,18 @@ interface PresetCategory {
     groups: PresetGroup[];
 }
 
-const [GENERAL_PRESETS, ...PRESET_CATEGORIES]: PresetCategory[] = Object.entries(ARENA_PRESETS).map(
-    ([category, inner]) => {
-        return {
-            name: category,
-            groups: Object.entries(inner).map(([group, presets]) => {
-                return {
-                    value: `${category}/${group}`,
-                    name: group,
-                    presets,
-                };
-            }),
-        };
-    },
-);
-
-const DEFAULT_OPEN_ITEMS = PRESET_CATEGORIES.map((c) => c.name);
+const PRESET_CATEGORIES: PresetCategory[] = Object.entries(ARENA_PRESETS).map(([category, inner]) => {
+    return {
+        name: category,
+        groups: Object.entries(inner).map(([group, presets]) => {
+            return {
+                value: `${category}/${group}`,
+                name: group,
+                presets,
+            };
+        }),
+    };
+});
 
 export const ArenaPanel: React.FC = () => {
     const classes = useControlStyles();
@@ -98,7 +96,7 @@ const SelectPresetButton: React.FC = () => {
 
     return (
         <Dialog open={open} onOpenChange={(ev, data) => setOpen(data.open)}>
-            <DialogTrigger>
+            <DialogTrigger disableButtonEnhancement>
                 <Button icon={<OptionsFilled />}>Arena presets</Button>
             </DialogTrigger>
             <DialogSurface className={classes.dialogSurface}>
@@ -120,104 +118,69 @@ const PresetsDialogBody: React.FC<PresetsDialogBodyProps> = ({ setOpen }) => {
     const revealedPresets = useAsync(getRevealedArenaPresets, [counter]);
     const [revealAll, setRevealAll] = useLocalStorage<CheckboxProps['checked']>('revealArenaPresets', false);
 
-    const [selectedGroup, setSelectedGroup] = useSessionStorage('arenaPresetGroup', GENERAL_PRESETS?.groups[0]?.value);
+    const [selectedGroup, setSelectedGroup] = useSessionStorage(
+        'arenaPresetGroup',
+        PRESET_CATEGORIES[0]?.groups[0]?.value,
+    );
     const [selectedPreset, setSelectedPreset] = useState<ArenaPreset>();
 
-    const checkedItems = useMemo(() => (selectedGroup ? [selectedGroup] : []), [selectedGroup]);
+    const applyPreset = (preset: ArenaPreset) => {
+        dispatch({ type: 'arena', value: preset.arena });
+        setOpen(false);
+    };
 
-    const applyPreset = useCallback(
-        (preset: ArenaPreset) => {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { name, ...arena } = preset;
-            dispatch({ type: 'arena', value: arena });
-            setOpen(false);
-        },
-        [dispatch, setOpen],
-    );
-
-    const revealPreset = useCallback(
-        async (key: string) => {
-            await revealArenaPreset(key);
-            reloadRevealedPresets();
-        },
-        [reloadRevealedPresets],
-    );
-
-    useHotkeys(
-        'enter',
-        () => {
-            if (selectedPreset) {
-                applyPreset(selectedPreset);
-            }
-        },
-        [applyPreset, selectedPreset],
-    );
-
-    const getCategoryTreeItems = useCallback(
-        (category?: PresetCategory) => {
-            return (
-                <>
-                    {category?.groups.map((group) => (
-                        <TreeItem
-                            key={group.name}
-                            itemType={'leaf'}
-                            value={group.value}
-                            onClick={() => setSelectedGroup(group.value)}
-                            onKeyUp={(ev) => {
-                                if (ev.key === 'Enter') {
-                                    ev.preventDefault();
-                                    setSelectedGroup(group.value);
-                                }
-                            }}
-                        >
-                            <TreeItemLayout
-                                className={mergeClasses(
-                                    classes.treeItem,
-                                    classes.treeCommon,
-                                    selectedGroup === group.value && classes.treeItemChecked,
-                                )}
-                                selector={{ className: classes.treeItemSelector }}
-                            >
-                                {group.name}
-                            </TreeItemLayout>
-                        </TreeItem>
-                    ))}
-                </>
-            );
-        },
-        [classes, selectedGroup, setSelectedGroup],
-    );
+    const revealPreset = async (key: string) => {
+        await revealArenaPreset(key);
+        reloadRevealedPresets();
+    };
 
     const presets = getPresetsForGroup(selectedGroup);
 
-    // TODO: make keyboard list keyboard-navigable
+    const presetListArrowNav = useArrowNavigationGroup({ axis: 'grid-linear' });
+
+    const presetListRef = useRef<HTMLDivElement>(null);
+
+    const handleItemSelect: NavDrawerProps['onNavItemSelect'] = (e, data) => {
+        setSelectedGroup(data.value);
+        presetListRef?.current?.focus();
+    };
 
     return (
         <HotkeyBlockingDialogBody>
             <DialogTitle>Arena presets</DialogTitle>
             <DialogContent className={classes.dialogContent}>
-                <Tree
-                    aria-label="arena presets"
+                <NavDrawer
                     className={classes.nav}
-                    defaultOpenItems={DEFAULT_OPEN_ITEMS}
-                    selectionMode="single"
-                    checkedItems={checkedItems}
-                    onCheckedChange={(ev, data) => setSelectedGroup(data.value as string)}
+                    onNavItemSelect={handleItemSelect}
+                    selectedValue={selectedGroup}
+                    type="inline"
+                    tabbable
+                    open
                 >
-                    <div className={classes.treeItemGroup}>{getCategoryTreeItems(GENERAL_PRESETS)}</div>
-                    {PRESET_CATEGORIES.map((category) => (
-                        <TreeItem key={category.name} itemType="branch" value={category.name}>
-                            <TreeItemLayout
-                                className={mergeClasses(classes.treeItemGroupHeader, classes.treeCommon)}
-                                selector={{ className: classes.treeItemSelector }}
-                            >
-                                {category.name}
-                            </TreeItemLayout>
-                            <Tree className={classes.treeItemGroup}>{getCategoryTreeItems(category)}</Tree>
-                        </TreeItem>
-                    ))}
-                </Tree>
-                <ul className={classes.presetList}>
+                    <NavDrawerBody>
+                        {PRESET_CATEGORIES.map((category) => (
+                            <React.Fragment key={category.name}>
+                                {category.name && (
+                                    <NavSectionHeader className={classes.category}>{category.name}</NavSectionHeader>
+                                )}
+
+                                {category.groups.map((group) => (
+                                    <NavItem key={group.name} value={group.value} className={classes.navItem}>
+                                        {group.name}
+                                    </NavItem>
+                                ))}
+                            </React.Fragment>
+                        ))}
+                    </NavDrawerBody>
+                </NavDrawer>
+
+                <div
+                    tabIndex={0}
+                    role="list"
+                    className={classes.presetList}
+                    ref={presetListRef}
+                    {...presetListArrowNav}
+                >
                     {presets?.map((preset) => {
                         const key = getPresetKey(selectedGroup, preset.name);
 
@@ -225,6 +188,7 @@ const PresetsDialogBody: React.FC<PresetsDialogBodyProps> = ({ setOpen }) => {
                             <PresetItem
                                 key={key}
                                 presetKey={key}
+                                tabIndex={0}
                                 preset={preset}
                                 selected={preset === selectedPreset}
                                 revealedPresets={revealAll ? [key] : revealedPresets.value}
@@ -234,7 +198,7 @@ const PresetsDialogBody: React.FC<PresetsDialogBodyProps> = ({ setOpen }) => {
                             />
                         );
                     })}
-                </ul>
+                </div>
             </DialogContent>
             <DialogActions fluid className={classes.dialogActions}>
                 <Checkbox
@@ -250,7 +214,7 @@ const PresetsDialogBody: React.FC<PresetsDialogBodyProps> = ({ setOpen }) => {
                 >
                     Select preset
                 </Button>
-                <DialogTrigger>
+                <DialogTrigger disableButtonEnhancement>
                     <Button>Cancel</Button>
                 </DialogTrigger>
             </DialogActions>
@@ -258,7 +222,7 @@ const PresetsDialogBody: React.FC<PresetsDialogBodyProps> = ({ setOpen }) => {
     );
 };
 
-interface PresetItemProps {
+interface PresetItemProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onSelect'> {
     preset: ArenaPreset;
     presetKey: string;
     selected: boolean;
@@ -276,48 +240,43 @@ const PresetItem: React.FC<PresetItemProps> = ({
     onConfirm,
     onReveal,
     onSelect,
+    ...props
 }) => {
     const classes = useStyles();
 
-    const isSpoiler = useMemo(() => {
-        return !(preset.isSpoilerFree || revealedPresets?.includes(presetKey));
-    }, [preset.isSpoilerFree, revealedPresets, presetKey]);
+    const isSpoiler = !(preset.isSpoilerFree || revealedPresets?.includes(presetKey));
 
-    const handleClick: MouseEventHandler<HTMLElement> = useCallback(
-        (ev) => {
-            if (isSpoiler) {
-                onReveal(ev);
-            }
+    const handleClick: MouseEventHandler<HTMLElement> = (ev) => {
+        if (isSpoiler) {
+            onReveal(ev);
+        }
 
-            onSelect(ev);
-        },
-        [isSpoiler, onReveal, onSelect],
-    );
+        onSelect(ev);
+    };
 
-    const handleDoubleClick: MouseEventHandler<HTMLElement> = useCallback(
-        (ev) => {
-            if (isSpoiler) {
-                onReveal(ev);
-            } else {
-                onConfirm(ev);
-            }
-        },
-        [isSpoiler, onReveal, onConfirm],
-    );
+    const handleDoubleClick: MouseEventHandler<HTMLElement> = (ev) => {
+        if (isSpoiler) {
+            onReveal(ev);
+        } else {
+            onConfirm(ev);
+        }
+    };
 
-    const name = isSpoiler ? preset.spoilerFreeName ?? preset.name : preset.name;
+    const name = isSpoiler ? (preset.spoilerFreeName ?? preset.name) : preset.name;
 
     const scene: Scene = {
         nextId: 0,
-        arena: preset,
+        arena: preset.arena,
         steps: [{ objects: [] }],
     };
 
     return (
-        <li
+        <button
+            role="listitem"
             className={mergeClasses(classes.presetItem, selected && classes.selected)}
             onClick={handleClick}
             onDoubleClick={handleDoubleClick}
+            {...props}
         >
             <div className={classes.presetHeader}>{name}</div>
             <div className={classes.arenaPreviewWrap}>
@@ -336,7 +295,7 @@ const PresetItem: React.FC<PresetItemProps> = ({
                     </div>
                 )}
             </div>
-        </li>
+        </button>
     );
 };
 
@@ -373,55 +332,15 @@ const useStyles = makeStyles({
         minWidth: '200px',
         marginRight: tokens.spacingHorizontalXS,
         overflowY: 'auto',
+        background: tokens.colorNeutralBackground1,
     },
 
-    treeItemSelector: {
-        display: 'none',
+    navItem: {
+        background: tokens.colorNeutralBackground1,
     },
 
-    treeCommon: {
-        borderRadius: tokens.borderRadiusMedium,
-        userSelect: 'none',
-    },
-
-    treeItem: {
-        paddingLeft: tokens.spacingHorizontalXXL,
-
-        ':hover': {
-            background: tokens.colorNeutralBackground1Hover,
-        },
-
-        ':hover:active': {
-            background: tokens.colorNeutralBackground1Pressed,
-        },
-    },
-
-    treeItemChecked: {
-        background: tokens.colorNeutralBackground1Selected,
-
-        position: 'relative',
-
-        '::after': {
-            content: '""',
-
-            position: 'absolute',
-            left: '2px',
-            width: '4px',
-            top: '4px',
-            bottom: '4px',
-
-            background: tokens.colorCompoundBrandForeground1,
-            borderRadius: tokens.borderRadiusSmall,
-        },
-    },
-
-    treeItemGroup: {
-        marginBottom: tokens.spacingVerticalL,
-    },
-
-    treeItemGroupHeader: {
-        ...typographyStyles.subtitle2Stronger,
-        userSelect: 'none',
+    category: {
+        marginLeft: `calc(-1 * ${tokens.spacingHorizontalMNudge} + 4px)`,
     },
 
     presetList: {
@@ -446,6 +365,9 @@ const useStyles = makeStyles({
         display: 'flex',
         flexFlow: 'column',
 
+        margin: 0,
+        padding: 0,
+
         width: `${PREVIEW_SIZE + 2}px`,
         listStyle: 'none',
         boxSizing: 'border-box',
@@ -455,6 +377,8 @@ const useStyles = makeStyles({
         transitionProperty: 'background, border, color',
         transitionDuration: tokens.durationFaster,
         transitionTimingFunction: tokens.curveEasyEase,
+
+        backgroundColor: 'transparent',
 
         ':hover': {
             backgroundColor: tokens.colorSubtleBackgroundHover,

@@ -20,6 +20,11 @@ export function mod360(deg: number): number {
     return ((deg % 360) + 360) % 360;
 }
 
+/** Clamps the given rotation angle to be between -179 and +180 */
+export function clampRotation(deg: number): number {
+    return mod360(Math.round(deg) + 179) - 179;
+}
+
 export function rotateArray<T>(items: readonly T[], offset: number): T[] {
     offset = ((offset % items.length) + items.length) % items.length;
 
@@ -69,7 +74,7 @@ type ObjectMapResult<T, V> = {
     [k in keyof T]: V;
 };
 
-export function objectMap<T extends object, K extends keyof T, V>(
+export function objectMap<V, T extends object, K extends keyof T>(
     obj: T,
     mapFn: (key: K, value: T[K]) => V,
 ): ObjectMapResult<T, V> {

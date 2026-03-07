@@ -2,8 +2,66 @@
 
 This page tracks notable changes made to XIVPlan. Not every change will be listed here.
 
+## March 1, 2026
+
+- Added an option to link an object's position to a parent object, so moving the parent also moves the children. Contributed by @Aygox-XIV.
+  - Dropping a marker or buff/debuff icon onto a party object will automatically link its position.
+- Added an option to link an object's rotation so it always faces another object, optionally with an angle offset. Contributed by @Aygox-XIV.
+- Fixed some hotkeys not appearing on the help page. Contributed by @superjump22.
+
+## February 15, 2026
+
+- Added arena presets for Arcadion M11.
+
+## October 26, 2025
+
+- Dragging an object will now move all selected objects with it.
+- Fixed an issue where the counter orbs in a stack marker were not hidden when the object was hidden.
+- Fixed an issue where the hitbox for selecting an enemy object was a square instead of a circle.
+
+## October 19, 2025
+
+- Hovering the mouse over an object in the scene list now highlights that object in the scene.
+- Opacity sliders now update the undo history only once per adjustment with mouse input.
+- Text controls now reflect updates in the scene immediately but only update the undo history when they lose focus.
+
+## October 7, 2025
+
+- Added `Ctrl+Shift+Z` as an alternative redo shortcut.
+
+## September 29, 2025
+
+- Dragging an object now updates the positions of tethers attached to it. Based on work originally done by @Aygox-XIV.
+
+## September 13, 2025
+
+- Migrated to React 19. Everything seems to be working, but please [let me know](https://github.com/joelspadin/xivplan/issues) if something is broken.
+- Added support for loading a plan via URL parameter.
+  - Navigate to `https://xivplan.netlify.app/?url=` followed by a URL to an .xivplan file. The server must serve the raw JSON file without wrapping it in an HTML page.
+- Added a dismiss button to all toast notifications.
+
+## Jun 28, 2025
+
+- Added a control to change a "look away" marker into a "look towards" marker.
+- Added a control to set the number of players required in a stack AOE.
+- Fixed parts of tether arrow heads getting cut off. Contributed by @Tanimodori.
+
+## Jun 25, 2025
+
+- Updated the appearance of meteor/tower objects to have more space between the pillars and arrange the pillars for a 3-stack in a triangle.
+- Updated the player count selection for meteor/tower objects to be easier to use.
+- Added an option to change the orientation of polygon objects so that a side faces upwards instead of a point.
+- Added a hotkey so objects' positions can be locked/unlocked with the `L` key.
+
+## Jun 23, 2025
+
+- Added a mirrored preset for Arcadion M8.
+
 ## Jun 22, 2025
 
+- Added a control to change the outline color of text.
+- Added a control to hide the text outline or replace it with a shadow.
+- Updated the appearance of color controls so the color picker button is inside the input field's border.
 - Adjusted the light theme to be a bit less red.
 - Changed the arena background color to be the same regardless of light or dark theme. This will be made customizable later.
 - Recreated many arena background images and object icons as SVGs.
@@ -167,7 +225,7 @@ This page tracks notable changes made to XIVPlan. Not every change will be liste
 
 ## Aug 21, 2023
 
-- Added a way to share a plan encoded in a URL.
+- Added a way to share a plan encoded in a URL. Contributed by @Envian.
 
 ## Jul 27, 2023
 

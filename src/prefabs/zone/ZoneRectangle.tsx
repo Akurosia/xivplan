@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Group, Rect } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
 import Icon from '../../assets/zone/square.svg?react';
@@ -6,13 +6,13 @@ import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
 import { LayerName } from '../../render/layers';
-import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, sceneVars, SELECTED_PROPS } from '../../render/sceneTheme';
 import { ObjectType, RectangleZone } from '../../scene';
+import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
 import { HideGroup } from '../HideGroup';
 import { PrefabIcon } from '../PrefabIcon';
 import { ResizeableObjectContainer } from '../ResizeableObjectContainer';
-import { useShowHighlight } from '../highlight';
+import { useHighlightProps, useOverrideProps } from '../highlight';
 import { getZoneStyle } from './style';
 
 const NAME = 'Rectangle';
@@ -57,12 +57,10 @@ registerDropHandler<RectangleZone>(ObjectType.Rect, (object, position) => {
 });
 
 const RectangleRenderer: React.FC<RendererProps<RectangleZone>> = ({ object }) => {
-    const showHighlight = useShowHighlight(object);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
 
-    const style = useMemo(
-        () => getZoneStyle(object.color, object.opacity, Math.min(object.width, object.height), object.hollow),
-        [object],
-    );
+    const style = getZoneStyle(object.color, object.opacity, Math.min(object.width, object.height), object.hollow);
 
     const highlightOffset = style.strokeWidth;
     const highlightWidth = object.width + highlightOffset;
@@ -71,14 +69,14 @@ const RectangleRenderer: React.FC<RendererProps<RectangleZone>> = ({ object }) =
     return (
         <ResizeableObjectContainer object={object} transformerProps={{ keepRatio: false }}>
             {(groupProps) => (
-                <Group {...groupProps}>
-                    {showHighlight && (
+                <Group {...groupProps} {...overrideProps}>
+                    {highlightProps && (
                         <Rect
                             offsetX={highlightOffset / 2}
                             offsetY={highlightOffset / 2}
                             width={highlightWidth}
                             height={highlightHeight}
-                            {...SELECTED_PROPS}
+                            {...highlightProps}
                         />
                     )}
                     <HideGroup>
@@ -95,7 +93,7 @@ registerRenderer<RectangleZone>(ObjectType.Rect, LayerName.Ground, RectangleRend
 const RectangleDetails: React.FC<ListComponentProps<RectangleZone>> = ({ object, ...props }) => {
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
             name={NAME}
             object={object}
             {...props}

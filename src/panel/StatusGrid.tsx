@@ -1,6 +1,6 @@
+import { VirtualizerScrollView } from '@fluentui-contrib/react-virtualizer';
 import { makeStyles, mergeClasses } from '@fluentui/react-components';
-import { Virtualizer, useStaticVirtualizerMeasure } from '@fluentui/react-virtualizer';
-import React, { useMemo } from 'react';
+import React from 'react';
 import { StatusIcon } from '../prefabs/StatusIcon';
 
 const ICON_SIZE = 32;
@@ -27,55 +27,47 @@ export interface StatusGridProps {
 export const StatusGrid: React.FC<StatusGridProps> = ({ className, columns, items }) => {
     const classes = useStyles();
 
-    const rows = useMemo(() => {
-        return chunked(items, columns);
-    }, [items, columns]);
-
-    const { virtualizerLength, bufferItems, bufferSize, scrollRef, containerSizeRef } = useStaticVirtualizerMeasure({
-        defaultItemSize: ITEM_SIZE,
-    });
+    const rows = chunked(items, columns);
 
     return (
-        <div className={mergeClasses(classes.container, className)} role="list" ref={scrollRef}>
-            <Virtualizer
-                numItems={rows.length}
-                virtualizerLength={virtualizerLength}
-                bufferItems={bufferItems}
-                bufferSize={bufferSize}
-                itemSize={ITEM_SIZE}
-                containerSizeRef={containerSizeRef}
-            >
-                {(index) => {
-                    const row = rows[index];
+        <VirtualizerScrollView
+            numItems={rows.length}
+            itemSize={ITEM_SIZE}
+            container={{
+                role: 'list',
+                className: mergeClasses(classes.container, className),
+            }}
+        >
+            {(index) => {
+                const row = rows[index];
 
-                    return (
-                        <div key={`row-${index}`} className={classes.row}>
-                            {row?.map((item, i) => {
-                                const itemIndex = columns * index + i;
+                return (
+                    <div key={`row-${index}`} className={classes.row}>
+                        {row?.map((item, i) => {
+                            const itemIndex = columns * index + i;
 
-                                return (
-                                    <div
-                                        key={`item-${itemIndex}`}
-                                        role="listitem"
-                                        aria-posinset={itemIndex}
-                                        aria-setsize={items.length}
-                                        className={classes.item}
-                                    >
-                                        <StatusIcon
-                                            name={item.name}
-                                            icon={item.icon.url}
-                                            iconId={item.icon.id}
-                                            maxStacks={item.maxStacks}
-                                            scale={2}
-                                        />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    );
-                }}
-            </Virtualizer>
-        </div>
+                            return (
+                                <div
+                                    key={`item-${itemIndex}`}
+                                    role="listitem"
+                                    aria-posinset={itemIndex}
+                                    aria-setsize={items.length}
+                                    className={classes.item}
+                                >
+                                    <StatusIcon
+                                        name={item.name}
+                                        icon={item.icon.url}
+                                        iconId={item.icon.id}
+                                        maxStacks={item.maxStacks}
+                                        scale={2}
+                                    />
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            }}
+        </VirtualizerScrollView>
     );
 };
 

@@ -1,27 +1,28 @@
 import { WedgeConfig } from 'konva/lib/shapes/Wedge';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Group, Shape, Wedge } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
 import { useScene } from '../../SceneProvider';
 import Icon from '../../assets/zone/cone.svg?react';
-import { getPointerAngle, snapAngle } from '../../coord';
+import { getAbsoluteRotation, getBaseFacingRotation, getPointerAngle, snapAngle } from '../../coord';
 import { getResizeCursor } from '../../cursor';
 import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { RendererProps, registerRenderer } from '../../render/ObjectRegistry';
 import { ActivePortal } from '../../render/Portals';
 import { LayerName } from '../../render/layers';
-import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, SELECTED_PROPS, sceneVars } from '../../render/sceneTheme';
-import { ConeZone, ObjectType } from '../../scene';
+import { ConeZone, ObjectType, Scene } from '../../scene';
+import { useIsDragging } from '../../selection';
+import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
-import { clamp, degtorad, mod360 } from '../../util';
+import { clamp, clampRotation, degtorad, mod360 } from '../../util';
 import { distance } from '../../vector';
 import { CONTROL_POINT_BORDER_COLOR, HandleFuncProps, HandleStyle, createControlPointManager } from '../ControlPoint';
 import { DraggableObject } from '../DraggableObject';
 import { HideGroup } from '../HideGroup';
 import { PrefabIcon } from '../PrefabIcon';
 import { MAX_CONE_ANGLE, MIN_CONE_ANGLE, MIN_RADIUS } from '../bounds';
-import { useShowHighlight, useShowResizer } from '../highlight';
+import { useHighlightProps, useOverrideProps, useShowResizer } from '../highlight';
 import { getZoneStyle } from './style';
 
 const NAME = 'Cone';
@@ -76,31 +77,27 @@ interface OffsetWedgeProps extends WedgeConfig {
 }
 
 const OffsetWedge: React.FC<OffsetWedgeProps> = ({ radius, angle, shapeOffset, ...props }) => {
-    const { offsetRadius, angleRad, pointX, pointY, cornerX1, cornerY1, cornerX2, cornerY2 } = useMemo(() => {
-        const angleRad = degtorad(angle);
-        const offsetRadius = radius + shapeOffset;
+    const angleRad = degtorad(angle);
+    const offsetRadius = radius + shapeOffset;
 
-        const arcX1 = offsetRadius;
-        const arcY1 = 0;
-        const arcX2 = offsetRadius * Math.cos(angleRad);
-        const arcY2 = offsetRadius * Math.sin(angleRad);
+    const arcX1 = offsetRadius;
+    const arcY1 = 0;
+    const arcX2 = offsetRadius * Math.cos(angleRad);
+    const arcY2 = offsetRadius * Math.sin(angleRad);
 
-        const cornerX1 = arcX1;
-        const cornerY1 = arcY1 - shapeOffset;
-        const cornerX2 = arcX2 + shapeOffset * Math.cos(angleRad + Math.PI / 2);
-        const cornerY2 = arcY2 + shapeOffset * Math.sin(angleRad + Math.PI / 2);
+    const cornerX1 = arcX1;
+    const cornerY1 = arcY1 - shapeOffset;
+    const cornerX2 = arcX2 + shapeOffset * Math.cos(angleRad + Math.PI / 2);
+    const cornerY2 = arcY2 + shapeOffset * Math.sin(angleRad + Math.PI / 2);
 
-        // At 360 degrees, divisor goes to 0. Put the point in the center.
-        // At <= 15 degrees, pointDist becomes large and shows a gap with the
-        // non-offset shape. Limit pointDist to prevent that.
-        const divisor = Math.sin(angleRad / 2);
-        const pointDist = Math.min(shapeOffset * 2, divisor <= 0.001 ? 0 : shapeOffset / divisor);
+    // At 360 degrees, divisor goes to 0. Put the point in the center.
+    // At <= 15 degrees, pointDist becomes large and shows a gap with the
+    // non-offset shape. Limit pointDist to prevent that.
+    const divisor = Math.sin(angleRad / 2);
+    const pointDist = Math.min(shapeOffset * 2, divisor <= 0.001 ? 0 : shapeOffset / divisor);
 
-        const pointX = -pointDist * Math.cos(angleRad / 2);
-        const pointY = -pointDist * Math.sin(angleRad / 2);
-
-        return { offsetRadius, angleRad, pointX, pointY, cornerX1, cornerY1, cornerX2, cornerY2 };
-    }, [radius, angle, shapeOffset]);
+    const pointX = -pointDist * Math.cos(angleRad / 2);
+    const pointY = -pointDist * Math.sin(angleRad / 2);
 
     return (
         <Shape
@@ -127,20 +124,18 @@ interface ConeRendererProps extends RendererProps<ConeZone> {
 }
 
 const ConeRenderer: React.FC<ConeRendererProps> = ({ object, radius, rotation, coneAngle }) => {
-    const isSelected = useShowHighlight(object);
-    const style = useMemo(
-        () => getZoneStyle(object.color, object.opacity, radius * 2, object.hollow),
-        [object.color, object.opacity, radius, object.hollow],
-    );
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
+    const style = getZoneStyle(object.color, object.opacity, radius * 2, object.hollow);
 
     return (
-        <Group rotation={rotation - 90 - coneAngle / 2}>
-            {isSelected && (
+        <Group rotation={rotation - 90 - coneAngle / 2} {...overrideProps}>
+            {highlightProps && (
                 <OffsetWedge
                     radius={radius}
                     angle={coneAngle}
                     shapeOffset={style.strokeWidth / 2}
-                    {...SELECTED_PROPS}
+                    {...highlightProps}
                 />
             )}
             <HideGroup>
@@ -151,32 +146,34 @@ const ConeRenderer: React.FC<ConeRendererProps> = ({ object, radius, rotation, c
 };
 
 function stateChanged(object: ConeZone, state: ConeState) {
-    return state.radius !== object.radius || state.rotation !== object.rotation || state.coneAngle !== object.coneAngle;
+    return (
+        state.radius !== object.radius ||
+        mod360(state.rotation) !== mod360(object.rotation) ||
+        state.coneAngle !== object.coneAngle
+    );
 }
 
 const ConeContainer: React.FC<RendererProps<ConeZone>> = ({ object }) => {
-    const { dispatch } = useScene();
+    const { dispatch, scene } = useScene();
     const showResizer = useShowResizer(object);
     const [resizing, setResizing] = useState(false);
-    const [dragging, setDragging] = useState(false);
+    const dragging = useIsDragging(object);
 
-    const updateObject = useCallback(
-        (state: ConeState) => {
-            state.rotation = Math.round(state.rotation);
-            state.coneAngle = Math.round(state.coneAngle);
+    const updateObject = (state: ConeState) => {
+        const baseRotation = getBaseFacingRotation(scene, object);
+        state.rotation = clampRotation(state.rotation - baseRotation);
+        state.coneAngle = Math.round(state.coneAngle);
 
-            if (!stateChanged(object, state)) {
-                return;
-            }
+        if (!stateChanged(object, state)) {
+            return;
+        }
 
-            dispatch({ type: 'update', value: { ...object, ...state } });
-        },
-        [dispatch, object],
-    );
+        dispatch({ type: 'update', value: { ...object, ...state } });
+    };
 
     return (
         <ActivePortal isActive={dragging || resizing}>
-            <DraggableObject object={object} onActive={setDragging}>
+            <DraggableObject object={object}>
                 <ConeControlPoints
                     object={object}
                     onActive={setResizing}
@@ -195,7 +192,7 @@ registerRenderer<ConeZone>(ObjectType.Cone, LayerName.Ground, ConeContainer);
 const ConeDetails: React.FC<ListComponentProps<ConeZone>> = ({ object, ...props }) => {
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
             name={NAME}
             object={object}
             {...props}
@@ -230,22 +227,24 @@ function getRadius(object: ConeZone, { pointerPos, activeHandleId }: HandleFuncP
     return object.radius;
 }
 
-function getRotation(object: ConeZone, { pointerPos, activeHandleId }: HandleFuncProps) {
+function getRotation(scene: Readonly<Scene>, object: ConeZone, { pointerPos, activeHandleId }: HandleFuncProps) {
     if (pointerPos && activeHandleId === HandleId.Radius) {
         const angle = getPointerAngle(pointerPos);
-        return snapAngle(angle, ROTATE_SNAP_DIVISION, ROTATE_SNAP_TOLERANCE);
+        const baseRotation = getBaseFacingRotation(scene, object);
+        return snapAngle(angle - baseRotation, ROTATE_SNAP_DIVISION, ROTATE_SNAP_TOLERANCE) + baseRotation;
     }
 
-    return object.rotation;
+    return getAbsoluteRotation(scene, object);
 }
 
-function getConeAngle(object: ConeZone, { pointerPos, activeHandleId }: HandleFuncProps) {
+function getConeAngle(scene: Readonly<Scene>, object: ConeZone, { pointerPos, activeHandleId }: HandleFuncProps) {
     if (pointerPos) {
+        const objectRotation = getAbsoluteRotation(scene, object);
         const angle = getPointerAngle(pointerPos);
 
         if (activeHandleId === HandleId.Angle1) {
             const coneAngle = snapAngle(
-                mod360(angle - object.rotation + 90) - 90,
+                mod360(angle - objectRotation + 90) - 90,
                 ROTATE_SNAP_DIVISION,
                 ROTATE_SNAP_TOLERANCE,
             );
@@ -253,7 +252,7 @@ function getConeAngle(object: ConeZone, { pointerPos, activeHandleId }: HandleFu
         }
         if (activeHandleId === HandleId.Angle2) {
             const coneAngle = snapAngle(
-                mod360(angle - object.rotation + 270) - 270,
+                mod360(angle - objectRotation + 270) - 270,
                 ROTATE_SNAP_DIVISION,
                 ROTATE_SNAP_TOLERANCE,
             );
@@ -266,10 +265,10 @@ function getConeAngle(object: ConeZone, { pointerPos, activeHandleId }: HandleFu
 }
 
 const ConeControlPoints = createControlPointManager<ConeZone, ConeState>({
-    handleFunc: (object, handle) => {
+    handleFunc: (scene, object, handle) => {
         const radius = getRadius(object, handle) + OUTSET;
-        const rotation = getRotation(object, handle);
-        const coneAngle = getConeAngle(object, handle);
+        const rotation = getRotation(scene, object, handle);
+        const coneAngle = getConeAngle(scene, object, handle);
 
         const x = radius * Math.sin(degtorad(coneAngle / 2));
         const y = radius * Math.cos(degtorad(coneAngle / 2));
@@ -281,10 +280,10 @@ const ConeControlPoints = createControlPointManager<ConeZone, ConeState>({
         ];
     },
     getRotation: getRotation,
-    stateFunc: (object, handle) => {
+    stateFunc: (scene, object, handle) => {
         const radius = getRadius(object, handle);
-        const rotation = getRotation(object, handle);
-        const coneAngle = getConeAngle(object, handle);
+        const rotation = getRotation(scene, object, handle);
+        const coneAngle = getConeAngle(scene, object, handle);
 
         return { radius, rotation, coneAngle };
     },

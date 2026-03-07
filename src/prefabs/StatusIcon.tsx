@@ -1,5 +1,5 @@
 import Konva from 'konva';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { Group, Image as KonvaImage, Rect, Text } from 'react-konva';
 import useImage from 'use-image';
 import { getDragOffset, registerDropHandler } from '../DropHandler';
@@ -7,14 +7,14 @@ import { DetailsItem } from '../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../panel/ListComponentRegistry';
 import { RendererProps, registerRenderer } from '../render/ObjectRegistry';
 import { LayerName } from '../render/layers';
-import { DEFAULT_IMAGE_OPACITY, SELECTED_PROPS } from '../render/sceneTheme';
 import { IconObject, ObjectType } from '../scene';
+import { DEFAULT_IMAGE_OPACITY } from '../theme';
 import { useImageTracked } from '../useObjectLoading';
 import { usePanelDrag } from '../usePanelDrag';
 import { HideGroup } from './HideGroup';
 import { PrefabIcon } from './PrefabIcon';
 import { ResizeableObjectContainer } from './ResizeableObjectContainer';
-import { useShowHighlight } from './highlight';
+import { useHighlightProps, useOverrideProps } from './highlight';
 
 const DEFAULT_SIZE = 32;
 
@@ -40,24 +40,28 @@ interface IconTimerProps {
     height: number;
 }
 
-const IconTimer: React.FC<IconTimerProps> = ({ time, width, height }) => {
-    const text = useMemo(() => {
-        if (time < 60) {
-            return time.toString();
-        }
-        if (time < 3600) {
-            return `${Math.floor(time / 60)}m`;
-        }
+function getIconTimerText(seconds: number) {
+    if (seconds < 60) {
+        return seconds.toString();
+    }
+    if (seconds < 3600) {
+        return `${Math.floor(seconds / 60)}m`;
+    }
 
-        return `${Math.floor(time / 3600)}h`;
-    }, [time]);
+    return `${Math.floor(seconds / 3600)}h`;
+}
+
+const IconTimer: React.FC<IconTimerProps> = ({ time, width, height }) => {
+    const text = getIconTimerText(time);
 
     const fontSize = Math.max(14, height / 3);
     const strokeWidth = Math.max(1, fontSize / 8);
 
     const [textNode, setTextNode] = useState<Konva.Text | null>(null);
     const [textWidth, setTextWidth] = useState(width);
-    useEffect(() => {
+    useLayoutEffect(() => {
+        // Need to sync state with actual Konva text node size before anything is rendered.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setTextWidth(textNode?.measureSize(text).width ?? width);
     }, [textNode, text, fontSize, width, setTextWidth]);
 
@@ -84,19 +88,20 @@ const IconTimer: React.FC<IconTimerProps> = ({ time, width, height }) => {
 };
 
 const IconRenderer: React.FC<RendererProps<IconObject>> = ({ object }) => {
-    const showHighlight = useShowHighlight(object);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
     const [image] = useImageTracked(object.image);
 
     return (
         <ResizeableObjectContainer object={object} transformerProps={{ centeredScaling: true }}>
             {(groupProps) => (
-                <Group {...groupProps}>
-                    {showHighlight && (
+                <Group {...groupProps} {...overrideProps}>
+                    {highlightProps && (
                         <Rect
                             width={object.width}
                             height={object.height}
                             cornerRadius={(object.width + object.height) / 2 / 5}
-                            {...SELECTED_PROPS}
+                            {...highlightProps}
                         />
                     )}
                     <HideGroup>

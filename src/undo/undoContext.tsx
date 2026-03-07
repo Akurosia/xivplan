@@ -1,37 +1,28 @@
-import React, {
-    ComponentType,
-    createContext,
-    Dispatch,
-    PropsWithChildren,
-    useCallback,
-    useContext,
-    useReducer,
-} from 'react';
-import { createUndoReducer, redoAction, resetAction, undoAction, UndoRedoAction, UndoRedoState } from './undoReducer';
+import React, { ComponentType, createContext, Dispatch, PropsWithChildren, use, useReducer } from 'react';
+import { createUndoReducer, StateActionBase, UndoRedoAction, UndoRedoState } from './undoReducer';
 
 export interface UndoProviderProps<S> extends PropsWithChildren {
     initialState: S;
 }
 
-export type UndoRedoFunc = () => void;
+export type StateActionFunc = () => void;
 
 export type UndoContext<S, A> = [state: UndoRedoState<S>, dispatch: Dispatch<A | UndoRedoAction<S>>];
 
-export function createUndoContext<S, A extends object>(
+export function createUndoContext<S, A extends StateActionBase>(
     reducer: React.Reducer<S, A>,
-    historyLimit = Infinity,
+    historyLimit: number,
 ): {
     UndoProvider: ComponentType<UndoProviderProps<S>>;
     Context: React.Context<UndoContext<S, A>>;
-    usePresent: () => [state: S, dispatch: Dispatch<A>];
-    useUndoRedo: () => [undo: UndoRedoFunc, redo: UndoRedoFunc];
+    usePresent: () => [transientPresent: S, present: S, dispatch: Dispatch<A | UndoRedoAction<S>>];
     useUndoRedoPossible: () => [undoPossible: boolean, redoPossible: boolean];
-    useReset: () => Dispatch<S>;
 } {
     const Context = createContext<UndoContext<S, A>>([
         {
             past: [],
             present: undefined as unknown as S,
+            transientPresent: undefined as unknown as S,
             future: [],
         },
         () => {
@@ -45,44 +36,35 @@ export function createUndoContext<S, A extends object>(
         const value = useReducer(undoReducer, {
             past: [],
             present: initialState,
+            transientPresent: initialState,
             future: [],
         });
 
-        return <Context.Provider value={value}>{children}</Context.Provider>;
+        return <Context value={value}>{children}</Context>;
     };
 
-    function usePresent(): [state: S, dispatch: Dispatch<A>] {
-        const [state, dispatch] = useContext(Context);
+    function usePresent(): [transientPresent: S, present: S, dispatch: Dispatch<A | UndoRedoAction<S>>] {
+        const [state, dispatch] = use(Context);
 
         if (state.present === undefined) {
             throw new Error('usePresent() called outside of UndoProvider');
         }
 
-        return [state.present, dispatch];
-    }
-
-    function useUndoRedo(): [undo: UndoRedoFunc, redo: UndoRedoFunc] {
-        const [, dispatch] = useContext(Context);
-
-        const undo = useCallback(() => dispatch(undoAction()), [dispatch]) as UndoRedoFunc;
-        const redo = useCallback(() => dispatch(redoAction()), [dispatch]) as UndoRedoFunc;
-
-        return [undo, redo];
+        return [state.transientPresent, state.present, dispatch];
     }
 
     function useUndoRedoPossible(): [undoPossible: boolean, redoPossible: boolean] {
-        const [state] = useContext(Context);
+        const [state] = use(Context);
         const undoPossible = state.past.length > 0;
         const redoPossible = state.future.length > 0;
 
         return [undoPossible, redoPossible];
     }
 
-    function useReset(): Dispatch<S> {
-        const [, dispatch] = useContext(Context);
-
-        return useCallback((state: S) => dispatch(resetAction(state)), [dispatch]);
-    }
-
-    return { UndoProvider, Context, usePresent, useUndoRedo, useUndoRedoPossible, useReset };
+    return {
+        UndoProvider,
+        Context,
+        usePresent,
+        useUndoRedoPossible,
+    };
 }

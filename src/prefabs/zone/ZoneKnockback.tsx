@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Circle, Group } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
 import Icon from '../../assets/zone/knockback.svg?react';
@@ -6,19 +6,13 @@ import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
 import { LayerName } from '../../render/layers';
-import {
-    CENTER_DOT_RADIUS,
-    DEFAULT_AOE_COLOR,
-    DEFAULT_AOE_OPACITY,
-    sceneVars,
-    SELECTED_PROPS,
-} from '../../render/sceneTheme';
 import { CircleZone, ObjectType } from '../../scene';
+import { CENTER_DOT_RADIUS, DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
 import { HideGroup } from '../HideGroup';
 import { PrefabIcon } from '../PrefabIcon';
 import { RadiusObjectContainer } from '../RadiusObjectContainer';
-import { useShowHighlight } from '../highlight';
+import { useHighlightProps, useOverrideProps } from '../highlight';
 import { ChevronTail } from './shapes';
 import { getArrowStyle, getZoneStyle } from './style';
 
@@ -65,27 +59,21 @@ interface KnockbackRendererProps extends RendererProps<CircleZone> {
 }
 
 const KnockbackRenderer: React.FC<KnockbackRendererProps> = ({ object, radius, isDragging }) => {
-    const showHighlight = useShowHighlight(object);
-    const ring = useMemo(
-        () => getZoneStyle(object.color, object.opacity, radius * 2),
-        [object.color, object.opacity, radius],
-    );
-    const arrow = useMemo(() => getArrowStyle(object.color, object.opacity * 3), [object.color, object.opacity]);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
+    const ring = getZoneStyle(object.color, object.opacity, radius * 2);
+    const arrow = getArrowStyle(object.color, object.opacity * 3);
 
-    const { cx, cw, ch, ca } = useMemo(() => {
-        return {
-            cx: radius,
-            cw: radius * 0.24,
-            ch: radius * 0.12,
-            ca: 40,
-        };
-    }, [radius]);
+    const cx = radius;
+    const cw = radius * 0.24;
+    const ch = radius * 0.12;
+    const ca = 40;
 
     return (
         <>
-            {showHighlight && <Circle radius={radius + ring.strokeWidth / 2} {...SELECTED_PROPS} />}
+            {highlightProps && <Circle radius={radius + ring.strokeWidth / 2} {...highlightProps} {...overrideProps} />}
 
-            <HideGroup>
+            <HideGroup {...overrideProps}>
                 <Circle radius={radius} {...ring} strokeEnabled={false} opacity={0.5} />
 
                 {isDragging && <Circle radius={CENTER_DOT_RADIUS} fill={ring.stroke} />}
@@ -123,7 +111,7 @@ registerRenderer<CircleZone>(ObjectType.Knockback, LayerName.Ground, KnockbackCo
 const KnockbackDetails: React.FC<ListComponentProps<CircleZone>> = ({ object, ...props }) => {
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
             name="Knockback"
             object={object}
             {...props}

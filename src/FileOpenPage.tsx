@@ -17,9 +17,8 @@ export const FileOpenPage: React.FC = () => {
     const loadFile = useFileLoader();
     const [error, setError] = useState<ReactNode>();
 
-    const navigateToMainPage = useCallback(() => {
-        navigate('/', { replace: true });
-    }, [navigate]);
+    // https://github.com/reactwg/react-compiler/discussions/18
+    const navigateToMainPage = useCallback(() => navigate('/', { replace: true }), [navigate]);
 
     useEffect(() => {
         if (window.launchQueue) {

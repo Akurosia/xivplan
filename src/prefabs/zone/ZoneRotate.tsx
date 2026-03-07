@@ -1,6 +1,6 @@
 import Konva from 'konva';
 import { ShapeConfig } from 'konva/lib/Shape';
-import React, { CSSProperties, RefObject, useMemo, useRef } from 'react';
+import React, { CSSProperties, RefObject, useRef } from 'react';
 import { Circle, Path } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
 import CounterClockwiseIcon from '../../assets/zone/rotate_ccw.svg?react';
@@ -9,14 +9,14 @@ import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
 import { LayerName } from '../../render/layers';
-import { CENTER_DOT_RADIUS, sceneVars, SELECTED_PROPS } from '../../render/sceneTheme';
 import { CircleZone, ObjectType } from '../../scene';
+import { CENTER_DOT_RADIUS, panelVars } from '../../theme';
 import { useKonvaCache } from '../../useKonvaCache';
 import { usePanelDrag } from '../../usePanelDrag';
 import { HideGroup } from '../HideGroup';
 import { PrefabIcon } from '../PrefabIcon';
 import { RadiusObjectContainer } from '../RadiusObjectContainer';
-import { useShowHighlight } from '../highlight';
+import { useHighlightProps, useOverrideProps } from '../highlight';
 import { getArrowStyle, getShadowColor, getZoneStyle } from './style';
 
 const DEFAULT_RADIUS = 25;
@@ -88,39 +88,37 @@ const ARROW_ANGLES = [45, 90, 135, 225, 270, 315];
 interface RotateRendererProps extends RendererProps<CircleZone> {
     radius: number;
     isDragging?: boolean;
-    groupRef: RefObject<Konva.Group>;
+    groupRef: RefObject<Konva.Group | null>;
 }
 
 const RotateRenderer: React.FC<RotateRendererProps> = ({ object, radius, groupRef, isDragging }) => {
-    const showHighlight = useShowHighlight(object);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
     const isClockwise = object.type === ObjectType.RotateCW;
 
-    const style = useMemo(
-        () => getZoneStyle(object.color, Math.max(50, object.opacity), radius * 2, object.hollow),
-        [object.color, object.opacity, object.hollow, radius],
-    );
+    const style = getZoneStyle(object.color, Math.max(50, object.opacity), radius * 2, object.hollow);
 
-    const arrow = useMemo(() => {
-        const scale = radius * ARROW_SCALE;
+    const scale = radius * ARROW_SCALE;
 
-        return {
-            ...getArrowStyle(object.color, 100),
-            offsetX: -1 / ARROW_SCALE,
-            scaleX: scale,
-            scaleY: scale * (isClockwise ? -1 : 1),
-            stroke: getShadowColor(object.color),
-            strokeWidth: radius / 15,
-        } as ShapeConfig;
-    }, [object.color, radius, isClockwise]);
+    const arrow: ShapeConfig = {
+        ...getArrowStyle(object.color, 100),
+        offsetX: -1 / ARROW_SCALE,
+        scaleX: scale,
+        scaleY: scale * (isClockwise ? -1 : 1),
+        stroke: getShadowColor(object.color),
+        strokeWidth: radius / 15,
+    };
 
     // Cache so overlapping shapes with opacity appear as one object.
     useKonvaCache(groupRef, [object, radius, arrow, isDragging]);
 
     return (
         <>
-            {showHighlight && <Circle radius={radius + style.strokeWidth / 2} {...SELECTED_PROPS} />}
+            {highlightProps && (
+                <Circle radius={radius + style.strokeWidth * 0.75} {...highlightProps} {...overrideProps} />
+            )}
 
-            <HideGroup opacity={(object.opacity * 2) / 100} ref={groupRef}>
+            <HideGroup opacity={(object.opacity * 2) / 100} ref={groupRef} {...overrideProps}>
                 <Circle radius={radius} {...style} />
 
                 {ARROW_ANGLES.map((r, i) => (
@@ -150,8 +148,8 @@ const RotateDetails: React.FC<ListComponentProps<CircleZone>> = ({ object, ...pr
     const Icon = object.type === ObjectType.RotateCW ? ClockwiseIcon : CounterClockwiseIcon;
 
     const style: CSSProperties = {
-        [sceneVars.colorZoneOrange]: object.color,
-        [sceneVars.colorZoneBlue]: object.color,
+        [panelVars.colorZoneOrange]: object.color,
+        [panelVars.colorZoneBlue]: object.color,
     };
 
     return (

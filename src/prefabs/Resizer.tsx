@@ -1,11 +1,12 @@
 import Konva from 'konva';
 import { Box } from 'konva/lib/shapes/Transformer';
-import React, { RefObject, useCallback, useEffect, useRef } from 'react';
+import React, { RefObject, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { Transformer } from 'react-konva';
 import { useScene } from '../SceneProvider';
+import { getBaseFacingRotation } from '../coord';
 import { ControlsPortal } from '../render/Portals';
 import { ResizeableObject, SceneObject, UnknownObject } from '../scene';
-import { clamp } from '../util';
+import { clamp, clampRotation } from '../util';
 import { useShowResizer } from './highlight';
 
 const DEFAULT_MIN_SIZE = 20;
@@ -18,7 +19,7 @@ const MAX_ANCHOR_SIZE = 10;
 
 export interface ResizerProps {
     object: ResizeableObject & UnknownObject;
-    nodeRef: RefObject<Konva.Group>;
+    nodeRef: RefObject<Konva.Group | null>;
     dragging?: boolean;
     minWidth?: number;
     minHeight?: number;
@@ -35,7 +36,7 @@ export const Resizer: React.FC<ResizerProps> = ({
     transformerProps,
     children,
 }) => {
-    const { dispatch } = useScene();
+    const { dispatch, scene } = useScene();
     const showResizer = useShowResizer(object);
     const trRef = useRef<Konva.Transformer>(null);
 
@@ -44,23 +45,26 @@ export const Resizer: React.FC<ResizerProps> = ({
 
     const anchorSize = clamp((object.width + object.height) / 10, MIN_ANCHOR_SIZE, MAX_ANCHOR_SIZE);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (showResizer && trRef.current && nodeRef.current) {
             trRef.current.nodes([nodeRef.current]);
             trRef.current.getLayer()?.batchDraw();
         }
     }, [object, showResizer, nodeRef, trRef]);
 
-    const onTransformEnd = useCallback(() => {
+    // Manual memoization because React Compiler thinks handleTransformEnd being passed to
+    // children() means it is used during render, and it uses a ref's .current property.
+    const handleTransformEnd = useCallback(() => {
         const node = nodeRef.current;
         if (!node) {
             return;
         }
+        const baseRotation = getBaseFacingRotation(scene, object);
 
         const newProps = {
             x: Math.round(object.x + node.x()),
             y: Math.round(object.y - node.y()),
-            rotation: Math.round(node.rotation()),
+            rotation: clampRotation(node.rotation() - baseRotation),
             width: Math.round(Math.max(minWidthRequired, object.width * node.scaleX())),
             height: Math.round(Math.max(minHeightRequired, object.height * node.scaleY())),
         };
@@ -72,7 +76,7 @@ export const Resizer: React.FC<ResizerProps> = ({
         node.clearCache();
 
         dispatch({ type: 'update', value: { ...object, ...newProps } as SceneObject });
-    }, [object, minWidthRequired, minHeightRequired, dispatch, nodeRef]);
+    }, [dispatch, minHeightRequired, minWidthRequired, nodeRef, object, scene]);
 
     const boundBoxFunc = useCallback(
         (oldBox: Box, newBox: Box) => {
@@ -81,18 +85,24 @@ export const Resizer: React.FC<ResizerProps> = ({
             }
             return newBox;
         },
-        [minWidthRequired, minHeightRequired],
+        [minHeightRequired, minWidthRequired],
     );
+
+    const baseRotation = useMemo(() => getBaseFacingRotation(scene, object), [scene, object]);
+    const rotationSnaps = useMemo(() => ROTATION_SNAPS.map((r) => r + baseRotation), [baseRotation]);
 
     return (
         <>
-            {children(onTransformEnd)}
+            {
+                // eslint-disable-next-line react-hooks/refs -- callback is only used in event handler
+                children(handleTransformEnd)
+            }
             {showResizer && (
                 <ControlsPortal>
                     <Transformer
                         ref={trRef}
                         visible={!dragging}
-                        rotationSnaps={ROTATION_SNAPS}
+                        rotationSnaps={rotationSnaps}
                         rotationSnapTolerance={2}
                         boundBoxFunc={boundBoxFunc}
                         anchorSize={anchorSize}

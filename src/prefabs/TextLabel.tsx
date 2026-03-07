@@ -1,24 +1,28 @@
 import { DrawTextRegular } from '@fluentui/react-icons';
 import Konva from 'konva';
-import React, { RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { ShapeConfig } from 'konva/lib/Shape';
+import React, { RefObject, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Group, Text, Transformer } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../DropHandler';
 import { useScene } from '../SceneProvider';
+import { getAbsoluteRotation, getBaseFacingRotation } from '../coord';
 import { DetailsItem } from '../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../panel/ListComponentRegistry';
 import { RendererProps, registerRenderer } from '../render/ObjectRegistry';
 import { ActivePortal } from '../render/Portals';
 import { LayerName } from '../render/layers';
-import { SELECTED_PROPS, useSceneTheme } from '../render/sceneTheme';
 import { ObjectType, TextObject } from '../scene';
+import { useIsDragging } from '../selection';
+import { useSceneTheme } from '../theme';
 import { useKonvaCache } from '../useKonvaCache';
 import { usePanelDrag } from '../usePanelDrag';
+import { clamp, clampRotation, mod360 } from '../util';
 import { CompositeReplaceGroup } from './CompositeReplaceGroup';
 import { DraggableObject } from './DraggableObject';
 import { HideCutoutGroup } from './HideGroup';
 import { PrefabIcon } from './PrefabIcon';
 import { GroupProps } from './ResizeableObjectContainer';
-import { useShowHighlight, useShowResizer } from './highlight';
+import { useHighlightProps, useOverrideProps, useShowResizer } from './highlight';
 
 const DEFAULT_TEXT = 'Text';
 const DEFAULT_TEXT_ALIGN = 'center';
@@ -30,6 +34,7 @@ const Icon = DrawTextRegular;
 
 export const TextLabel: React.FC = () => {
     const [, setDragObject] = usePanelDrag();
+    const theme = useSceneTheme();
 
     return (
         <PrefabIcon
@@ -41,6 +46,7 @@ export const TextLabel: React.FC = () => {
                     object: {
                         type: ObjectType.Text,
                         text: DEFAULT_TEXT,
+                        stroke: theme.colorArena,
                     },
                     offset: getDragOffset(e),
                 });
@@ -58,6 +64,7 @@ registerDropHandler<TextObject>(ObjectType.Text, (object, position) => {
             fontSize: DEFAULT_FONT_SIZE,
             color: DEFAULT_TEXT_COLOR,
             opacity: DEFAULT_TEXT_OPACITY,
+            style: 'outline',
             rotation: 0,
             ...object,
             ...position,
@@ -82,7 +89,7 @@ function measureText(
 
 interface TextResizerProps {
     object: TextObject;
-    nodeRef: RefObject<Konva.Group>;
+    nodeRef: RefObject<Konva.Group | null>;
     dragging?: boolean;
     children: (onTransformEnd: (evt: Konva.KonvaEventObject<Event>) => void) => React.ReactElement;
 }
@@ -91,33 +98,42 @@ const SNAP_ANGLE = 45;
 const ROTATION_SNAPS = Array.from({ length: 360 / SNAP_ANGLE }).map((_, i) => i * SNAP_ANGLE);
 
 const TextResizer: React.FC<TextResizerProps> = ({ object, nodeRef, dragging, children }) => {
-    const { dispatch } = useScene();
+    const { dispatch, scene } = useScene();
     const showResizer = useShowResizer(object);
     const trRef = useRef<Konva.Transformer>(null);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (showResizer && trRef.current && nodeRef.current) {
             trRef.current.nodes([nodeRef.current]);
             trRef.current.getLayer()?.batchDraw();
         }
     }, [showResizer, nodeRef, trRef]);
 
-    const onTransformEnd = useCallback(() => {
+    // Manual memoization because React Compiler thinks handleTransformEnd being passed to
+    // children() means it is used during render, and it uses a ref's .current property.
+    const handleTransformEnd = useCallback(() => {
         const node = nodeRef.current;
         if (!node) {
             return;
         }
 
+        const baseRotation = getBaseFacingRotation(scene, object);
         const newProps: Partial<TextObject> = {
-            rotation: Math.round(node.rotation()),
+            rotation: clampRotation(node.rotation() - baseRotation),
         };
+        if (mod360(object.rotation) == mod360(newProps.rotation!)) {
+            return;
+        }
 
         dispatch({ type: 'update', value: { ...object, ...newProps } });
-    }, [object, dispatch, nodeRef]);
+    }, [dispatch, nodeRef, object, scene]);
 
     return (
         <>
-            {children(onTransformEnd)}
+            {
+                // eslint-disable-next-line react-hooks/refs -- callback is only used in event handler
+                children(handleTransformEnd)
+            }
             {showResizer && (
                 <ActivePortal isActive>
                     <Transformer
@@ -141,14 +157,15 @@ interface TextContainerProps {
 
 const TextContainer: React.FC<TextContainerProps> = ({ object, cacheKey, children }) => {
     const [resizing, setResizing] = useState(false);
-    const [dragging, setDragging] = useState(false);
+    const dragging = useIsDragging(object);
     const shapeRef = useRef<Konva.Group>(null);
+    const { scene } = useScene();
 
     useKonvaCache(shapeRef, [cacheKey, object]);
 
     return (
         <ActivePortal isActive={dragging || resizing}>
-            <DraggableObject object={object} onActive={setDragging}>
+            <DraggableObject object={object}>
                 <TextResizer object={object} nodeRef={shapeRef} dragging={dragging}>
                     {(onTransformEnd) => {
                         return children({
@@ -158,7 +175,7 @@ const TextContainer: React.FC<TextContainerProps> = ({ object, cacheKey, childre
                                 onTransformEnd(e);
                                 setResizing(false);
                             },
-                            rotation: object.rotation,
+                            rotation: getAbsoluteRotation(scene, object),
                         });
                     }}
                 </TextResizer>
@@ -168,15 +185,16 @@ const TextContainer: React.FC<TextContainerProps> = ({ object, cacheKey, childre
 };
 
 const TextRenderer: React.FC<RendererProps<TextObject>> = ({ object }) => {
-    const theme = useSceneTheme();
-    const showHighlight = useShowHighlight(object);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
+    const showHighlight = !!highlightProps;
 
     const [measuredFontSize, setMeasuredFontSize] = useState(object.fontSize);
     const [size, setSize] = useState({ width: 0, height: 0 });
     const [cacheKey, setCacheKey] = useState(0);
 
     const textRef = useRef<Konva.Text>(null);
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (textRef.current) {
             setSize(measureText(textRef.current, object.text, object.fontSize, LINE_HEIGHT));
             setMeasuredFontSize(object.fontSize);
@@ -200,14 +218,25 @@ const TextRenderer: React.FC<RendererProps<TextObject>> = ({ object }) => {
         setCacheKey(cacheKey + 1);
     }
 
-    const strokeWidth = Math.max(1, measuredFontSize / 8);
+    const strokeWidth = object.style === 'outline' ? Math.ceil(clamp(measuredFontSize / 15, 2, 8)) : 0;
+    const highlightStrokeWidth = (highlightProps?.strokeWidth ?? 0) + strokeWidth;
+
+    const shadow: ShapeConfig =
+        object.style === 'shadow'
+            ? {
+                  shadowColor: object.stroke,
+                  shadowOpacity: 0.5,
+                  shadowOffsetY: 3,
+                  shadowBlur: 4,
+              }
+            : {};
 
     return (
         <>
             <TextContainer object={object} cacheKey={cacheKey}>
                 {(groupProps) => (
-                    <Group {...groupProps} offsetX={size.width / 2} offsetY={size.height / 2}>
-                        {showHighlight && (
+                    <Group {...groupProps} offsetX={size.width / 2} offsetY={size.height / 2} {...overrideProps}>
+                        {highlightProps && (
                             <Text
                                 text={object.text}
                                 width={size.width}
@@ -216,8 +245,8 @@ const TextRenderer: React.FC<RendererProps<TextObject>> = ({ object }) => {
                                 verticalAlign="middle"
                                 fontSize={measuredFontSize}
                                 lineHeight={LINE_HEIGHT}
-                                {...SELECTED_PROPS}
-                                strokeWidth={strokeWidth}
+                                {...highlightProps}
+                                strokeWidth={highlightStrokeWidth}
                             />
                         )}
 
@@ -232,9 +261,10 @@ const TextRenderer: React.FC<RendererProps<TextObject>> = ({ object }) => {
                                     fontSize={measuredFontSize}
                                     lineHeight={LINE_HEIGHT}
                                     fill={object.color}
-                                    stroke={theme.arena.fill}
+                                    stroke={object.stroke}
                                     strokeWidth={strokeWidth}
                                     fillAfterStrokeEnabled
+                                    {...shadow}
                                 />
                             </CompositeReplaceGroup>
                         </HideCutoutGroup>

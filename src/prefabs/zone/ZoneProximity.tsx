@@ -1,6 +1,6 @@
 import Color from 'colorjs.io';
 import { ShapeConfig } from 'konva/lib/Shape';
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Circle, Group, Line, Path, Wedge } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
 import Icon from '../../assets/zone/falloff.svg?react';
@@ -8,14 +8,14 @@ import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
 import { LayerName } from '../../render/layers';
-import { COLOR_BLUE_WHITE, DEFAULT_AOE_OPACITY, sceneVars, SELECTED_PROPS } from '../../render/sceneTheme';
 import { CircleZone, ObjectType } from '../../scene';
+import { COLOR_BLUE_WHITE, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
 import { degtorad } from '../../util';
 import { HideGroup } from '../HideGroup';
 import { PrefabIcon } from '../PrefabIcon';
 import { RadiusObjectContainer } from '../RadiusObjectContainer';
-import { useShowHighlight } from '../highlight';
+import { useHighlightProps, useOverrideProps } from '../highlight';
 import { getArrowStyle, getShadowColor } from './style';
 
 const DEFAULT_RADIUS = 200;
@@ -83,7 +83,7 @@ function getArrowPoints() {
 
 const FlareArrow: React.FC<ShapeConfig> = ({ ...props }) => {
     const { offsetX, offsetY, rotation, shadowColor, ...arrowProps } = props;
-    const points = useMemo(() => getArrowPoints(), []);
+    const points = getArrowPoints();
 
     return (
         <Group offsetX={offsetX} offsetY={offsetY} rotation={rotation} listening={false}>
@@ -108,16 +108,14 @@ const SCALE2 = 2;
 function getGradient(color: string, opacity: number) {
     const c = new Color(color);
 
-    // TODO: update to c.set({ alpha: value }) once colorjs.io v0.6.0 is released
-    const center = c.clone();
-    center.alpha = opacity / 100;
-    const centerStr = center.display();
+    const center = c
+        .clone()
+        .set('alpha', opacity / 100)
+        .display();
 
-    const edge = c.clone();
-    edge.alpha = 0.05;
-    const edgeStr = edge.display();
+    const edge = c.clone().set('alpha', 0.05).display();
 
-    return [0, centerStr, 1, edgeStr];
+    return [0, center, 1, edge];
 }
 
 function getShadowOffset(i: number): ShapeConfig {
@@ -139,26 +137,23 @@ interface ProximityRendererProps extends RendererProps<CircleZone> {
 }
 
 const ProximityRenderer: React.FC<ProximityRendererProps> = ({ object, radius }) => {
-    const showHighlight = useShowHighlight(object);
-    const gradient = useMemo(
-        () =>
-            ({
-                fillRadialGradientColorStops: getGradient(object.color, object.opacity),
-                fillRadialGradientStartRadius: 0,
-                fillRadialGradientEndRadius: radius,
-            } as ShapeConfig),
-        [object.color, object.opacity, radius],
-    );
-    const arrow = useMemo(() => getArrowStyle(object.color, object.opacity * 3), [object.color, object.opacity]);
-    const shadowColor = useMemo(() => getShadowColor(object.color), [object.color]);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
+    const gradient: ShapeConfig = {
+        fillRadialGradientColorStops: getGradient(object.color, object.opacity),
+        fillRadialGradientStartRadius: 0,
+        fillRadialGradientEndRadius: radius,
+    };
+    const arrow = getArrowStyle(object.color, object.opacity * 3);
+    const shadowColor = getShadowColor(object.color);
 
     const arrowScale = Math.max(1, radius / DEFAULT_RADIUS);
 
     return (
         <>
-            {showHighlight && <Circle radius={radius} {...SELECTED_PROPS} opacity={0.25} />}
+            {highlightProps && <Circle radius={radius} {...highlightProps} {...overrideProps} />}
 
-            <HideGroup>
+            <HideGroup {...overrideProps}>
                 <Circle radius={radius} {...gradient} />
 
                 <Group scaleX={arrowScale} scaleY={arrowScale}>
@@ -198,7 +193,7 @@ registerRenderer<CircleZone>(ObjectType.Proximity, LayerName.Ground, ProximityCo
 const ProximityDetails: React.FC<ListComponentProps<CircleZone>> = ({ object, ...props }) => {
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
             name="Proximity AOE"
             object={object}
             {...props}

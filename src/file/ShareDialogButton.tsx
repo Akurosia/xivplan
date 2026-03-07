@@ -14,7 +14,7 @@ import {
     useToastController,
 } from '@fluentui/react-components';
 import { CopyRegular, ShareRegular } from '@fluentui/react-icons';
-import React, { ReactNode, useCallback, useMemo } from 'react';
+import React, { ReactNode } from 'react';
 import { CollapsableToolbarButton } from '../CollapsableToolbarButton';
 import { HotkeyBlockingDialogBody } from '../HotkeyBlockingDialogBody';
 import { useScene } from '../SceneProvider';
@@ -42,21 +42,21 @@ export const ShareDialogButton: React.FC<ShareDialogButtonProps> = ({ children }
 
 const ShareDialogBody: React.FC = () => {
     const classes = useStyles();
-    const { scene } = useScene();
+    const { canonicalScene } = useScene();
     const { dispatchToast } = useToastController();
-    const url = useMemo(() => getSceneUrl(scene), [scene]);
+    const url = getSceneUrl(canonicalScene);
 
-    const copyToClipboard = useCallback(async () => {
+    const copyToClipboard = async () => {
         await navigator.clipboard.writeText(url);
         dispatchToast(<CopySuccessToast />, { intent: 'success' });
-    }, [url, dispatchToast]);
+    };
 
     return (
         <HotkeyBlockingDialogBody>
             <DialogTitle>Share</DialogTitle>
             <DialogContent>
                 <Field label="Link to this plan">
-                    <Textarea value={url} contentEditable={false} appearance="filled-darker-shadow" rows={6} />
+                    <Textarea value={url} contentEditable={false} appearance="filled-darker" rows={6} />
                 </Field>
                 <p>
                     If your browser won&apos;t open the link, paste the text into{' '}

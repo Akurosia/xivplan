@@ -17,10 +17,10 @@ import {
     SaveEditRegular,
     SaveRegular,
 } from '@fluentui/react-icons';
-import React, { ReactElement, useCallback, useContext, useState } from 'react';
+import React, { ReactElement, useContext, useState } from 'react';
 import { InPortal } from 'react-reverse-portal';
 import { CollapsableSplitButton, CollapsableToolbarButton } from './CollapsableToolbarButton';
-import { FileSource, useScene, useSceneUndoRedo, useSceneUndoRedoPossible, useSetSource } from './SceneProvider';
+import { FileSource, useScene, useSceneUndoRedoPossible, useSetSource } from './SceneProvider';
 import { StepScreenshotButton } from './StepScreenshotButton';
 import { ToolbarContext } from './ToolbarContext';
 import { saveFile } from './file';
@@ -28,6 +28,7 @@ import { OpenDialog, SaveAsDialog } from './file/FileDialog';
 import { ShareDialogButton } from './file/ShareDialogButton';
 import { downloadScene, getBlobSource } from './file/blob';
 import { DialogOpenContext } from './useCloseDialog';
+import { useCancelConnectionSelection } from './useEditMode';
 import { useHotkeys } from './useHotkeys';
 import { useIsDirty, useSetSavedState } from './useIsDirty';
 
@@ -41,9 +42,19 @@ const useStyles = makeStyles({
 export const MainToolbar: React.FC = () => {
     const classes = useStyles();
     const toolbarNode = useContext(ToolbarContext);
-    const [undo, redo] = useSceneUndoRedo();
+    const { dispatch } = useScene();
     const [undoPossible, redoPossible] = useSceneUndoRedoPossible();
     const [openFileOpen, setOpenFileOpen] = useState(false);
+    const cancelConnectionSelection = useCancelConnectionSelection();
+
+    const undo = () => {
+        cancelConnectionSelection();
+        dispatch({ type: 'undo' });
+    };
+    const redo = () => {
+        cancelConnectionSelection();
+        dispatch({ type: 'redo' });
+    };
 
     useHotkeys(
         'ctrl+o',
@@ -57,9 +68,9 @@ export const MainToolbar: React.FC = () => {
 
     return (
         <>
-            <DialogOpenContext.Provider value={setOpenFileOpen}>
+            <DialogOpenContext value={setOpenFileOpen}>
                 <OpenDialog open={openFileOpen} onOpenChange={(ev, data) => setOpenFileOpen(data.open)} />
-            </DialogOpenContext.Provider>
+            </DialogOpenContext>
 
             <InPortal node={toolbarNode}>
                 <Toolbar className={classes.toolbar}>
@@ -111,28 +122,28 @@ const SaveButton: React.FC = () => {
     const isDirty = useIsDirty();
     const setSavedState = useSetSavedState();
     const [saveAsOpen, setSaveAsOpen] = useState(false);
-    const { scene, source } = useScene();
+    const { canonicalScene, source } = useScene();
     const setSource = useSetSource();
 
     const { type, text, icon, disabled } = getSaveButtonState(source, isDirty);
 
-    const save = useCallback(async () => {
+    const save = async () => {
         if (!source) {
             setSaveAsOpen(true);
         } else if (isDirty) {
-            await saveFile(scene, source);
-            setSavedState(scene);
+            await saveFile(canonicalScene, source);
+            setSavedState(canonicalScene);
         }
-    }, [scene, source, isDirty, setSavedState, setSaveAsOpen]);
+    };
 
-    const download = useCallback(() => {
-        downloadScene(scene, source?.name);
+    const download = () => {
+        downloadScene(canonicalScene, source?.name);
         if (!source) {
             setSource(getBlobSource());
         }
-    }, [scene, source, setSource]);
+    };
 
-    const handleClick = useCallback(() => {
+    const handleClick = () => {
         switch (type) {
             case 'save':
                 save();
@@ -146,7 +157,7 @@ const SaveButton: React.FC = () => {
                 download();
                 break;
         }
-    }, [type, download, save, setSaveAsOpen]);
+    };
 
     useHotkeys(
         'ctrl+s',
@@ -197,9 +208,9 @@ const SaveButton: React.FC = () => {
                     </MenuList>
                 </MenuPopover>
             </Menu>
-            <DialogOpenContext.Provider value={setSaveAsOpen}>
+            <DialogOpenContext value={setSaveAsOpen}>
                 <SaveAsDialog open={saveAsOpen} onOpenChange={(ev, data) => setSaveAsOpen(data.open)} />
-            </DialogOpenContext.Provider>
+            </DialogOpenContext>
         </>
     );
 };

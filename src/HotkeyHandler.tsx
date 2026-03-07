@@ -1,18 +1,21 @@
 import { Stage } from 'konva/lib/Stage';
 import { Vector2d } from 'konva/lib/types';
-import React, { Dispatch, SetStateAction, useCallback, useContext, useState } from 'react';
+import React, { Dispatch, SetStateAction, useContext, useState } from 'react';
+import { HotkeyCallback } from 'react-hotkeys-hook';
 import { HelpContext } from './HelpContext';
 import { HelpDialog } from './HelpDialog';
-import { GroupMoveAction, SceneAction, getObjectById, useScene, useSceneUndoRedo } from './SceneProvider';
+import { GroupMoveAction, SceneAction, useScene } from './SceneProvider';
 import { SceneSelection } from './SelectionContext';
-import { getSceneCoord, rotateCoord } from './coord';
+import { omitInterconnectedObjects } from './connections';
+import { getAbsolutePosition, getSceneCoord, makeRelative, rotateCoord } from './coord';
 import { copyObjects, getGroupCenter } from './copy';
 import { EditMode } from './editMode';
+import { moveObjectsBy } from './groupOperations';
 import { makeTethers } from './prefabs/TetherConfig';
 import { useStage } from './render/stage';
 import { MoveableObject, Scene, SceneObject, TetherType, isMoveable, isRotateable } from './scene';
 import { getSelectedObjects, selectAll, selectNewObjects, selectNone, useSelection } from './selection';
-import { useEditMode } from './useEditMode';
+import { useCancelConnectionSelection, useEditMode } from './useEditMode';
 import { useHotkeyHelp, useHotkeys } from './useHotkeys';
 import { useTetherConfig } from './useTetherConfig';
 import { commonValue, setOrOmit } from './util';
@@ -26,16 +29,23 @@ const CATEGORY_DRAW = '6.Draw';
 const CATEGORY_STEPS = '7.Steps';
 
 const UndoRedoHandler: React.FC = () => {
-    const [undo, redo] = useSceneUndoRedo();
+    const { dispatch } = useScene();
+    const cancelConnectionSelection = useCancelConnectionSelection();
 
-    useHotkeys('ctrl+z', { category: CATEGORY_HISTORY, help: 'Undo' }, (e) => {
-        undo();
+    const undoCallback: HotkeyCallback = (e) => {
+        cancelConnectionSelection();
+        dispatch({ type: 'undo' });
         e.preventDefault();
-    });
-    useHotkeys('ctrl+y', { category: CATEGORY_HISTORY, help: 'Redo' }, (e) => {
-        redo();
+    };
+    const redoCallback: HotkeyCallback = (e) => {
+        cancelConnectionSelection();
+        dispatch({ type: 'redo' });
         e.preventDefault();
-    });
+    };
+
+    useHotkeys('ctrl+z', { category: CATEGORY_HISTORY, help: 'Undo' }, undoCallback);
+    useHotkeys('ctrl+y', { category: CATEGORY_HISTORY, help: 'Redo' }, redoCallback);
+    useHotkeys('ctrl+shift+z', { category: CATEGORY_HISTORY, help: 'Redo' }, redoCallback);
 
     return null;
 };
@@ -50,7 +60,7 @@ function pasteObjects(
 ): void {
     const pointerPosition = stage.getRelativePointerPosition() ?? { x: 0, y: 0 };
     const newCenter = centerOnMouse ? getSceneCoord(scene, pointerPosition) : undefined;
-    const newObjects = copyObjects(scene, objects, newCenter);
+    const { objects: newObjects } = copyObjects(scene, objects, newCenter);
 
     if (newObjects.length) {
         dispatch({ type: 'add', object: newObjects });
@@ -59,9 +69,20 @@ function pasteObjects(
 }
 
 function toggleHide(objects: readonly SceneObject[], dispatch: Dispatch<SceneAction>) {
-    const show = commonValue(objects, (obj) => !obj.hide);
+    const hide = commonValue(objects, (obj) => obj.hide ?? false);
 
-    dispatch({ type: 'update', value: objects.map((obj) => setOrOmit(obj, 'hide', !!show)) });
+    const newValue = hide === undefined ? false : !hide;
+
+    dispatch({ type: 'update', value: objects.map((obj) => setOrOmit(obj, 'hide', newValue)) });
+}
+
+function toggleLock(objects: readonly SceneObject[], dispatch: Dispatch<SceneAction>) {
+    const moveable = objects.filter(isMoveable);
+    const pinned = commonValue(moveable, (obj) => obj.pinned ?? false);
+
+    const newValue = pinned === undefined ? false : !pinned;
+
+    dispatch({ type: 'update', value: moveable.map((obj) => setOrOmit(obj, 'pinned', newValue)) });
 }
 
 const SelectionActionHandler: React.FC = () => {
@@ -89,7 +110,9 @@ const SelectionActionHandler: React.FC = () => {
         'escape',
         { category: CATEGORY_SELECTION, help: 'Unselect all, cancel tool' },
         (e) => {
-            if (selection.size) {
+            if (editMode == EditMode.SelectConnection) {
+                setEditMode(EditMode.Normal);
+            } else if (selection.size) {
                 setSelection(selectNone());
             } else if (editMode !== EditMode.Normal) {
                 setEditMode(EditMode.Normal);
@@ -196,36 +219,48 @@ const SelectionActionHandler: React.FC = () => {
         [step, dispatch, selection],
     );
 
-    const tetherCallback = useCallback(
-        (type: TetherType) => (e: KeyboardEvent) => {
-            if (selection.size === 0) {
-                // When nothing selected, tether hotkeys should toggle tether tool.
-                if (editMode === EditMode.Tether && tetherConfig.tether === type) {
-                    setEditMode(EditMode.Normal);
-                } else {
-                    setEditMode(EditMode.Tether);
-                    setTetherConfig({ tether: type });
-                }
-            } else {
-                // When objects are selected and in normal mode, tether hotkeys
-                // should directly create tethers.
-                if (editMode !== EditMode.Normal) {
-                    return;
-                }
-
-                const tethers = makeTethers(getSelectedObjects(step, selection), type);
-                if (tethers.length === 0) {
-                    return;
-                }
-
-                dispatch({ type: 'add', object: tethers });
-                setSelection(selectNewObjects(scene, tethers.length));
+    useHotkeys(
+        'l',
+        { category: CATEGORY_SELECTION, help: 'Lock/unlock selected object positions' },
+        (e) => {
+            // This will fire together with CTRL+L, so ignore it in that case.
+            if (!selection.size || e.ctrlKey) {
+                return;
             }
 
-            e.preventDefault();
+            toggleLock(getSelectedObjects(step, selection), dispatch);
         },
-        [scene, step, dispatch, selection, setSelection, editMode, setEditMode, tetherConfig, setTetherConfig],
+        { useKey: true },
+        [step, dispatch, selection],
     );
+
+    const tetherCallback = (type: TetherType) => (e: KeyboardEvent) => {
+        if (selection.size === 0) {
+            // When nothing selected, tether hotkeys should toggle tether tool.
+            if (editMode === EditMode.Tether && tetherConfig.tether === type) {
+                setEditMode(EditMode.Normal);
+            } else {
+                setEditMode(EditMode.Tether);
+                setTetherConfig({ tether: type });
+            }
+        } else {
+            // When objects are selected and in normal mode, tether hotkeys
+            // should directly create tethers.
+            if (editMode !== EditMode.Normal) {
+                return;
+            }
+
+            const tethers = makeTethers(getSelectedObjects(step, selection), type);
+            if (tethers.length === 0) {
+                return;
+            }
+
+            dispatch({ type: 'add', object: tethers });
+            setSelection(selectNewObjects(scene, tethers.length));
+        }
+
+        e.preventDefault();
+    };
 
     useHotkeys('/', { category: CATEGORY_TETHER, help: 'Tether' }, tetherCallback(TetherType.Line), { useKey: true }, [
         tetherCallback,
@@ -273,10 +308,15 @@ const SMALL_MOVE_OFFSET = 1;
 const DEFAULT_MOVE_OFFSET = 10;
 const LARGE_MOVE_OFFSET = 25;
 
-function rotateObject<T extends MoveableObject>(object: T, center: Vector2d, rotation: number): T {
-    const pos = rotateCoord(object, rotation, center);
+function rotateObject<T extends MoveableObject>(
+    scene: Readonly<Scene>,
+    object: T,
+    center: Vector2d,
+    rotation: number,
+): T {
+    const pos = rotateCoord(getAbsolutePosition(scene, object), rotation, center);
 
-    const update = { ...object, ...pos };
+    const update = { ...object, ...makeRelative(scene, pos, object.positionParentId) };
 
     if (isRotateable(object)) {
         return {
@@ -293,29 +333,20 @@ const EditActionHandler: React.FC = () => {
     const { scene, step, dispatch } = useScene();
     const [editMode] = useEditMode();
 
-    const moveCallback = useCallback(
-        (offset: Partial<Vector2d>) => (e: KeyboardEvent) => {
-            if (editMode !== EditMode.Normal) {
-                return;
-            }
+    const moveCallback = (offset: Partial<Vector2d>) => (e: KeyboardEvent) => {
+        if (editMode !== EditMode.Normal) {
+            return;
+        }
 
-            const value: SceneObject[] = [];
-            selection.forEach((id) => {
-                const object = getObjectById(scene, id);
-                if (object && isMoveable(object)) {
-                    value.push({
-                        ...object,
-                        x: object.x + (offset?.x ?? 0),
-                        y: object.y + (offset?.y ?? 0),
-                    } as SceneObject & MoveableObject);
-                }
-            });
+        const selectedObjects = omitInterconnectedObjects(
+            scene,
+            getSelectedObjects(step, selection).filter(isMoveable),
+        );
+        const value = moveObjectsBy(selectedObjects, offset);
 
-            dispatch({ type: 'update', value });
-            e.preventDefault();
-        },
-        [scene, dispatch, selection, editMode],
-    );
+        dispatch({ type: 'update', value });
+        e.preventDefault();
+    };
 
     useHotkeys('up', {}, moveCallback({ y: DEFAULT_MOVE_OFFSET }), [moveCallback]);
     useHotkeys('down', {}, moveCallback({ y: -DEFAULT_MOVE_OFFSET }), [moveCallback]);
@@ -336,27 +367,26 @@ const EditActionHandler: React.FC = () => {
     useHotkeyHelp({ keys: 'ctrl+🡐🡑🡓🡒', category: CATEGORY_EDIT, help: 'Move object (coarse)' });
     useHotkeyHelp({ keys: 'shift+🡐🡑🡓🡒', category: CATEGORY_EDIT, help: 'Move object (fine)' });
 
-    const rotateCallback = useCallback(
-        (offset: number) => (e: KeyboardEvent) => {
-            if (editMode !== EditMode.Normal) {
-                return;
-            }
+    const rotateCallback = (offset: number) => (e: KeyboardEvent) => {
+        if (editMode !== EditMode.Normal) {
+            return;
+        }
 
-            const value: SceneObject[] = [];
-            const center = getGroupCenter(getSelectedObjects(step, selection).filter(isMoveable));
+        const value: SceneObject[] = [];
+        const selectedObjects = getSelectedObjects(step, selection)
+            .filter(isMoveable)
+            // TODO: figure out the expected behavior of rotating a selection of >1 items that includes
+            // objects attached to others (including those not in the selection).
+            .filter((obj) => selection.size == 1 || obj.positionParentId == undefined);
+        const center = getGroupCenter(scene, selectedObjects);
 
-            selection.forEach((id) => {
-                const object = getObjectById(scene, id);
-                if (object && isMoveable(object)) {
-                    value.push(rotateObject(object, center, offset));
-                }
-            });
+        selectedObjects.forEach((object) => {
+            value.push(rotateObject(scene, object, center, offset));
+        });
 
-            dispatch({ type: 'update', value });
-            e.preventDefault();
-        },
-        [scene, step, dispatch, selection, editMode],
-    );
+        dispatch({ type: 'update', value });
+        e.preventDefault();
+    };
 
     useHotkeys('ctrl+g', { category: CATEGORY_EDIT, help: 'Rotate 90° counter-clockwise' }, rotateCallback(-90), [
         rotateCallback,
@@ -366,13 +396,10 @@ const EditActionHandler: React.FC = () => {
     ]);
     useHotkeys('ctrl+j', { category: CATEGORY_EDIT, help: 'Rotate 180°' }, rotateCallback(180), [rotateCallback]);
 
-    const orderCallback = useCallback(
-        (type: GroupMoveAction['type']) => (e: KeyboardEvent) => {
-            dispatch({ type, ids: [...selection] });
-            e.preventDefault();
-        },
-        [dispatch, selection],
-    );
+    const orderCallback = (type: GroupMoveAction['type']) => (e: KeyboardEvent) => {
+        dispatch({ type, ids: [...selection] });
+        e.preventDefault();
+    };
 
     useHotkeys('pageup', { category: CATEGORY_EDIT, help: 'Move layer up' }, orderCallback('moveUp'), [orderCallback]);
     useHotkeys('pagedown', { category: CATEGORY_EDIT, help: 'Move layer down' }, orderCallback('moveDown'), [
@@ -413,11 +440,13 @@ const DrawModeHandler: React.FC = () => {
 
 const StepHandler: React.FC = () => {
     const { dispatch } = useScene();
+    const cancelConnectionSelection = useCancelConnectionSelection();
 
     useHotkeys(
         'alt+left',
         { category: CATEGORY_STEPS, help: 'Previous step' },
         (e) => {
+            cancelConnectionSelection();
             dispatch({ type: 'previousStep' });
             e.preventDefault();
         },
@@ -428,6 +457,7 @@ const StepHandler: React.FC = () => {
         'alt+right',
         { category: CATEGORY_STEPS, help: 'Next step' },
         (e) => {
+            cancelConnectionSelection();
             dispatch({ type: 'nextStep' });
             e.preventDefault();
         },
@@ -438,6 +468,7 @@ const StepHandler: React.FC = () => {
         'ctrl+enter',
         { category: CATEGORY_STEPS, help: 'Add step' },
         (e) => {
+            cancelConnectionSelection();
             dispatch({ type: 'addStep' });
             e.preventDefault();
         },

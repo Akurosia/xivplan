@@ -1,29 +1,45 @@
 import react from '@vitejs/plugin-react';
-import { UserConfig, defineConfig } from 'vite';
+import { UserConfig, defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import svgr from 'vite-plugin-svgr';
 
-// https://vitejs.dev/config/
-const isProduction = process.env.NODE_ENV === 'production';
+function getModeOptions(mode: string): UserConfig {
+    if (mode === 'production') {
+        return {};
+    }
 
-let devOptions: Partial<UserConfig> | undefined;
-if (!isProduction) {
-    devOptions = {
+    return {
         esbuild: {
             minifyIdentifiers: false,
-        },
-        resolve: {
-            alias: {
-                'react-dom$': 'react-dom/profiling',
-            },
         },
     };
 }
 
-export default defineConfig({
-    ...devOptions,
+function getEnvOptions(mode: string): UserConfig {
+    const env = loadEnv(mode, process.cwd());
+
+    if (env.VITE_PROFILE !== '0') {
+        return {
+            resolve: {
+                alias: {
+                    'react-dom$': 'react-dom/profiling',
+                },
+            },
+        };
+    }
+
+    return {};
+}
+
+export default defineConfig(({ mode }) => ({
+    ...getModeOptions(mode),
+    ...getEnvOptions(mode),
     plugins: [
-        react(),
+        react({
+            babel: {
+                plugins: ['babel-plugin-react-compiler'],
+            },
+        }),
         svgr({
             svgrOptions: {
                 plugins: ['@svgr/plugin-svgo', '@svgr/plugin-jsx'],
@@ -101,4 +117,4 @@ export default defineConfig({
             },
         }),
     ],
-});
+}));

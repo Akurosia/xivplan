@@ -1,5 +1,5 @@
 import Konva from 'konva';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Group, Rect } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
 import Icon from '../../assets/zone/line_knockback.svg?react';
@@ -7,13 +7,13 @@ import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
 import { LayerName } from '../../render/layers';
-import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, sceneVars, SELECTED_PROPS } from '../../render/sceneTheme';
 import { ObjectType, RectangleZone } from '../../scene';
+import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
 import { HideGroup } from '../HideGroup';
 import { PrefabIcon } from '../PrefabIcon';
 import { ResizeableObjectContainer } from '../ResizeableObjectContainer';
-import { useShowHighlight } from '../highlight';
+import { useHighlightProps, useOverrideProps } from '../highlight';
 import { ChevronTail } from './shapes';
 import { getArrowStyle, getZoneStyle } from './style';
 
@@ -66,13 +66,12 @@ const ARROW_W = 25;
 const ARROW_H = 15;
 
 const LineKnockbackRenderer: React.FC<RendererProps<RectangleZone>> = ({ object }) => {
-    const showHighlight = useShowHighlight(object);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
     const [pattern, setPattern] = useState<HTMLImageElement>();
-    const style = useMemo(
-        () => getZoneStyle(object.color, object.opacity, Math.min(object.width, object.height)),
-        [object.color, object.opacity, object.width, object.height],
-    );
-    const arrow = useMemo(() => getArrowStyle(object.color, object.opacity * 3), [object.color, object.opacity]);
+    const style = getZoneStyle(object.color, object.opacity, Math.min(object.width, object.height));
+
+    const arrow = getArrowStyle(object.color, object.opacity * 3);
     const { fill, ...stroke } = style;
 
     const arrowRef = useRef<Konva.Group>(null);
@@ -95,14 +94,14 @@ const LineKnockbackRenderer: React.FC<RendererProps<RectangleZone>> = ({ object 
         <>
             <ResizeableObjectContainer object={object} transformerProps={{ keepRatio: false }}>
                 {(groupProps) => (
-                    <Group {...groupProps}>
-                        {showHighlight && (
+                    <Group {...groupProps} {...overrideProps}>
+                        {highlightProps && (
                             <Rect
                                 offsetX={highlightOffset / 2}
                                 offsetY={highlightOffset / 2}
                                 width={highlightWidth}
                                 height={highlightHeight}
-                                {...SELECTED_PROPS}
+                                {...highlightProps}
                             />
                         )}
                         <HideGroup>
@@ -144,7 +143,7 @@ registerRenderer<RectangleZone>(ObjectType.LineKnockback, LayerName.Ground, Line
 const LineKnockbackDetails: React.FC<ListComponentProps<RectangleZone>> = ({ object, ...props }) => {
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
             name="Line knockback"
             object={object}
             {...props}

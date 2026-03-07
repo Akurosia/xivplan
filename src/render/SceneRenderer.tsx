@@ -1,16 +1,18 @@
 import Konva from 'konva';
 import { KonvaEventObject } from 'konva/lib/Node';
-import React, { PropsWithChildren, useCallback, useContext, useState } from 'react';
+import React, { PropsWithChildren, RefAttributes, useContext, useState } from 'react';
 import { Layer, Stage } from 'react-konva';
 import { DefaultCursorProvider } from '../DefaultCursorProvider';
 import { getDropAction } from '../DropHandler';
 import { SceneHotkeyHandler } from '../HotkeyHandler';
 import { EditorState, SceneAction, SceneContext, useCurrentStep, useScene } from '../SceneProvider';
-import { SelectionContext, SelectionState } from '../SelectionContext';
+import { SelectionContext, SelectionState, SpotlightContext } from '../SelectionContext';
 import { getCanvasSize, getSceneCoord } from '../coord';
+import { EditMode } from '../editMode';
 import { Scene } from '../scene';
 import { selectNewObjects, selectNone, useSelection } from '../selection';
 import { UndoContext } from '../undo/undoContext';
+import { useEditMode } from '../useEditMode';
 import { usePanelDrag } from '../usePanelDrag';
 import { ArenaRenderer } from './ArenaRenderer';
 import { DrawTarget } from './DrawTarget';
@@ -24,33 +26,37 @@ export const SceneRenderer: React.FC = () => {
     const [, setSelection] = useContext(SelectionContext);
     const size = getCanvasSize(scene);
     const [stage, stageRef] = useState<Konva.Stage | null>(null);
+    const [editMode] = useEditMode();
 
-    const onClickStage = useCallback(
-        (e: KonvaEventObject<MouseEvent>) => {
-            // Clicking on nothing (with no modifier keys held) should cancel selection.
-            if (!e.evt.ctrlKey && !e.evt.shiftKey) {
-                setSelection(selectNone());
-            }
-        },
-        [setSelection],
-    );
+    const onClickStage = (e: KonvaEventObject<MouseEvent>) => {
+        // Clicking on nothing while selecting a connection target should keep the
+        // current selection to better keep the visuals of which objects are going to
+        // get connected.
+        if (editMode === EditMode.SelectConnection) {
+            return;
+        }
+        // Clicking on nothing (with no modifier keys held) should cancel selection.
+        if (!e.evt.ctrlKey && !e.evt.shiftKey) {
+            setSelection(selectNone());
+        }
+    };
 
     // console.log(scene);
 
     return (
         <DropTarget stage={stage}>
             <Stage {...size} ref={stageRef} onClick={onClickStage}>
-                <StageContext.Provider value={stage}>
+                <StageContext value={stage}>
                     <DefaultCursorProvider>
                         <SceneContents />
                     </DefaultCursorProvider>
-                </StageContext.Provider>
+                </StageContext>
             </Stage>
         </DropTarget>
     );
 };
 
-export interface ScenePreviewProps {
+export interface ScenePreviewProps extends RefAttributes<Konva.Stage> {
     scene: Scene;
     stepIndex?: number;
     width?: number;
@@ -60,58 +66,69 @@ export interface ScenePreviewProps {
     simple?: boolean;
 }
 
-export const ScenePreview = React.forwardRef<Konva.Stage, ScenePreviewProps>(
-    ({ scene, stepIndex, width, height, backgroundColor, simple }, ref) => {
-        const size = getCanvasSize(scene);
-        let scale = 1;
-        let x = 0;
-        let y = 0;
+export const ScenePreview: React.FC<ScenePreviewProps> = ({
+    ref,
+    scene,
+    stepIndex,
+    width,
+    height,
+    backgroundColor,
+    simple,
+}) => {
+    const size = getCanvasSize(scene);
+    let scale = 1;
+    let x = 0;
+    let y = 0;
 
-        if (width) {
-            scale = Math.min(scale, width / size.width);
-        }
-        if (height) {
-            scale = Math.min(scale, height / size.height);
-        }
+    if (width) {
+        scale = Math.min(scale, width / size.width);
+    }
+    if (height) {
+        scale = Math.min(scale, height / size.height);
+    }
 
-        size.width *= scale;
-        size.height *= scale;
+    size.width *= scale;
+    size.height *= scale;
 
-        if (width) {
-            x = (width - size.width) / 2;
-        }
-        if (height) {
-            y = (height - size.height) / 2;
-        }
+    if (width) {
+        x = (width - size.width) / 2;
+    }
+    if (height) {
+        y = (height - size.height) / 2;
+    }
 
-        const sceneContext: UndoContext<EditorState, SceneAction> = [
-            {
-                present: {
-                    scene,
-                    currentStep: stepIndex ?? 0,
-                },
-                past: [],
-                future: [],
-            },
-            () => undefined,
-        ];
+    const present: EditorState = {
+        scene,
+        currentStep: stepIndex ?? 0,
+    };
 
-        const selectionContext: SelectionState = [new Set<number>(), () => {}];
+    const sceneContext: UndoContext<EditorState, SceneAction> = [
+        {
+            present,
+            transientPresent: present,
+            past: [],
+            future: [],
+        },
+        () => undefined,
+    ];
 
-        return (
-            <Stage ref={ref} x={x} y={y} width={width} height={height} scaleX={scale} scaleY={scale}>
-                <DefaultCursorProvider>
-                    <SceneContext.Provider value={sceneContext}>
-                        <SelectionContext.Provider value={selectionContext}>
+    const selectionContext: SelectionState = [new Set<number>(), () => {}];
+    const spotlightContext: SelectionState = [new Set<number>(), () => {}];
+
+    return (
+        <Stage ref={ref} x={x} y={y} width={width} height={height} scaleX={scale} scaleY={scale}>
+            <DefaultCursorProvider>
+                <SceneContext value={sceneContext}>
+                    <SelectionContext value={selectionContext}>
+                        <SpotlightContext value={spotlightContext}>
                             <SceneContents listening={false} simple={simple} backgroundColor={backgroundColor} />
-                        </SelectionContext.Provider>
-                    </SceneContext.Provider>
-                </DefaultCursorProvider>
-            </Stage>
-        );
-    },
-);
-ScenePreview.displayName = 'ScenePreview';
+                        </SpotlightContext>
+                    </SelectionContext>
+                </SceneContext>
+            </DefaultCursorProvider>
+        </Stage>
+    );
+};
 
 interface SceneContentsProps {
     listening?: boolean;
@@ -157,33 +174,30 @@ const DropTarget: React.FC<DropTargetProps> = ({ stage, children }) => {
     const [, setSelection] = useSelection();
     const [dragObject, setDragObject] = usePanelDrag();
 
-    const onDrop = useCallback(
-        (e: React.DragEvent) => {
-            e.preventDefault();
+    const onDrop = (e: React.DragEvent) => {
+        e.preventDefault();
 
-            if (!dragObject || !stage) {
-                return;
-            }
+        if (!dragObject || !stage) {
+            return;
+        }
 
-            setDragObject(null);
-            stage.setPointersPositions(e);
+        setDragObject(null);
+        stage.setPointersPositions(e);
 
-            const position = stage.getPointerPosition();
-            if (!position) {
-                return;
-            }
+        const position = stage.getPointerPosition();
+        if (!position) {
+            return;
+        }
 
-            position.x -= dragObject.offset.x;
-            position.y -= dragObject.offset.y;
+        position.x -= dragObject.offset.x;
+        position.y -= dragObject.offset.y;
 
-            const action = getDropAction(dragObject, getSceneCoord(scene, position));
-            if (action) {
-                dispatch(action);
-                setSelection(selectNewObjects(scene, 1));
-            }
-        },
-        [scene, stage, dispatch, setSelection, dragObject, setDragObject],
-    );
+        const action = getDropAction(dragObject, getSceneCoord(scene, position));
+        if (action) {
+            dispatch(action);
+            setSelection(selectNewObjects(scene, 1));
+        }
+    };
 
     return (
         <div onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>

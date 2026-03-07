@@ -1,57 +1,56 @@
-/* eslint-disable react-compiler/react-compiler */
-/* eslint-disable react-hooks/exhaustive-deps */
 import { Node } from 'konva/lib/Node';
-import { DependencyList, useEffect, useState } from 'react';
+import { DependencyList, useLayoutEffect } from 'react';
 
-export function useKonvaCache(ref: React.RefObject<Node>, deps: DependencyList): void;
-export function useKonvaCache(ref: React.RefObject<Node>, enabled: boolean, deps: DependencyList): void;
+type CacheConfig = Exclude<Parameters<Node['cache']>[0], undefined>;
+
+export type UseKonvaCacheOptions = CacheConfig & {
+    enabled?: boolean;
+};
+
+/**
+ * Caches the given Konva node, refreshing the cache whenever the dependencies change.
+ *
+ * @param ref Ref to the node to cache
+ * @param deps Dependency list
+ */
+export function useKonvaCache(ref: React.RefObject<Node | null>, deps: DependencyList): void;
+/**
+ * Caches the given Konva node, refreshing the cache whenever the dependencies change.
+ *
+ * @param ref Ref to the node to cache
+ * @param options Configuration for caching, as well as whether caching should be enabled
+ * @param deps Dependency list
+ */
 export function useKonvaCache(
-    ref: React.RefObject<Node>,
-    enabledOrDeps: boolean | DependencyList,
-    deps?: DependencyList,
+    ref: React.RefObject<Node | null>,
+    options: UseKonvaCacheOptions,
+    deps: DependencyList,
+): void;
+export function useKonvaCache(
+    ref: React.RefObject<Node | null>,
+    configOrDeps: UseKonvaCacheOptions | DependencyList,
+    maybeDeps?: DependencyList,
 ) {
-    let enabled = true;
+    const [enabled, config, deps] = useOptions(configOrDeps, maybeDeps);
 
-    if (typeof enabledOrDeps === 'boolean') {
-        enabled = enabledOrDeps;
-        deps = deps ?? [];
-    } else {
-        deps = enabledOrDeps;
-    }
-
-    // On changes to dependencies, immediately clear the cache to avoid a flicker
-    // where the object draws with its old cached appearance.
-    const [prevRef, setPrevRef] = useState(ref.current);
-    const [prevDeps, setPrevDeps] = useState(deps);
-    const [prevEnabled, setPrevEnabled] = useState(enabled);
-
-    if (ref.current !== prevRef) {
-        setPrevRef(ref.current);
-        ref.current?.clearCache();
-    }
-
-    if (!depsEqual(prevDeps, deps)) {
-        setPrevDeps(deps);
-        ref.current?.clearCache();
-    }
-
-    if (enabled !== prevEnabled) {
-        setPrevEnabled(enabled);
-        ref.current?.clearCache();
-    }
-
-    // Then re-cache the object after it has been drawn.
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (enabled) {
-            ref.current?.cache();
+            ref.current?.cache(config);
+        } else {
+            ref.current?.clearCache();
         }
-    }, [enabled, ref.current, ...deps]);
+    }, [enabled, config, ref, ...deps]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-function depsEqual(prevDeps: DependencyList, nextDeps: DependencyList) {
-    if (prevDeps.length !== nextDeps.length) {
-        return false;
+function useOptions(
+    optionsOrDeps: UseKonvaCacheOptions | DependencyList,
+    deps?: DependencyList,
+): [boolean, CacheConfig | undefined, DependencyList] {
+    if (typeof optionsOrDeps === 'object') {
+        const { enabled, ...config } = optionsOrDeps as UseKonvaCacheOptions;
+
+        return [enabled ?? true, config, deps ?? []];
     }
 
-    return prevDeps.every((dep, i) => dep === nextDeps[i]);
+    return [true, undefined, optionsOrDeps];
 }

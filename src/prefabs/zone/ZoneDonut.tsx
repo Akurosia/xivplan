@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Circle, Ring } from 'react-konva';
 import Icon from '../../assets/zone/donut.svg?react';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
@@ -6,17 +6,11 @@ import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { LayerName } from '../../render/layers';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
-import {
-    CENTER_DOT_RADIUS,
-    DEFAULT_AOE_COLOR,
-    DEFAULT_AOE_OPACITY,
-    sceneVars,
-    SELECTED_PROPS,
-} from '../../render/sceneTheme';
 import { DonutZone, ObjectType } from '../../scene';
+import { CENTER_DOT_RADIUS, DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
 import { HideGroup } from '../HideGroup';
-import { useShowHighlight } from '../highlight';
+import { useHighlightProps, useOverrideProps } from '../highlight';
 import { PrefabIcon } from '../PrefabIcon';
 import { RadiusObjectContainer } from '../RadiusObjectContainer';
 import { getZoneStyle } from './style';
@@ -68,22 +62,24 @@ interface DonutRendererProps extends RendererProps<DonutZone> {
 }
 
 const DonutRenderer: React.FC<DonutRendererProps> = ({ object, radius, innerRadius, isDragging }) => {
-    const showHighlight = useShowHighlight(object);
-    const style = useMemo(
-        () => getZoneStyle(object.color, object.opacity, radius * 2),
-        [object.color, object.opacity, radius],
-    );
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
+    const style = getZoneStyle(object.color, object.opacity, radius * 2);
+
+    const highlightInnerRadius = Math.min(radius, innerRadius);
+    const highlightOuterRadius = Math.max(radius, innerRadius);
 
     return (
         <>
-            {showHighlight && (
+            {highlightProps && (
                 <Ring
-                    innerRadius={innerRadius - style.strokeWidth / 2}
-                    outerRadius={radius + style.strokeWidth / 2}
-                    {...SELECTED_PROPS}
+                    innerRadius={highlightInnerRadius - style.strokeWidth / 2}
+                    outerRadius={highlightOuterRadius + style.strokeWidth / 2}
+                    {...highlightProps}
+                    {...overrideProps}
                 />
             )}
-            <HideGroup>
+            <HideGroup {...overrideProps}>
                 <Ring innerRadius={innerRadius} outerRadius={radius} {...style} />
 
                 {isDragging && <Circle radius={CENTER_DOT_RADIUS} fill={style.stroke} />}
@@ -105,7 +101,7 @@ registerRenderer<DonutZone>(ObjectType.Donut, LayerName.Ground, DonutContainer);
 const DonutDetails: React.FC<ListComponentProps<DonutZone>> = ({ object, ...props }) => {
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
             name={NAME}
             object={object}
             {...props}

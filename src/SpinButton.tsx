@@ -4,7 +4,7 @@ import {
     SpinButtonOnChangeData,
     SpinButtonProps,
 } from '@fluentui/react-components';
-import React, { useCallback } from 'react';
+import React from 'react';
 import { formatNumber, fractionDigitsToStep, round } from './util';
 
 export interface CustomSpinButtonProps extends Omit<SpinButtonProps, 'displayValue'> {
@@ -16,42 +16,39 @@ export interface CustomSpinButtonProps extends Omit<SpinButtonProps, 'displayVal
  * and properly handles direct data entry.
  */
 export const SpinButton: React.FC<CustomSpinButtonProps> = ({ value, onChange, fractionDigits, ...props }) => {
-    fractionDigits ??= 0;
+    const nonNullFractionDigits = fractionDigits ?? 0;
 
-    const wrappedOnChange = useCallback(
-        (event: SpinButtonChangeEvent, data: SpinButtonOnChangeData) => {
-            if (!isValid(data.value)) {
-                if (!data.displayValue) {
-                    return;
-                }
-
-                let value = Number(data.displayValue);
-                if (!isValid(value)) {
-                    return;
-                }
-
-                value = round(value, fractionDigitsToStep(fractionDigits));
-
-                if (props.min !== undefined) {
-                    value = Math.max(value, props.min);
-                }
-                if (props.max !== undefined) {
-                    value = Math.min(value, props.max);
-                }
-
-                data.value = value;
+    const wrappedOnChange = (event: SpinButtonChangeEvent, data: SpinButtonOnChangeData) => {
+        if (!isValid(data.value)) {
+            if (!data.displayValue) {
+                return;
             }
 
-            onChange?.(event, data);
-        },
-        [onChange, fractionDigits, props.min, props.max],
-    );
+            let value = Number(data.displayValue);
+            if (!isValid(value)) {
+                return;
+            }
+
+            value = round(value, fractionDigitsToStep(nonNullFractionDigits));
+
+            if (props.min !== undefined) {
+                value = Math.max(value, props.min);
+            }
+            if (props.max !== undefined) {
+                value = Math.min(value, props.max);
+            }
+
+            data.value = value;
+        }
+
+        onChange?.(event, data);
+    };
 
     return (
         <FluentSpinButton
             {...props}
             value={value ?? NaN}
-            displayValue={formatNumber(value, fractionDigits)}
+            displayValue={formatNumber(value, nonNullFractionDigits)}
             onChange={wrappedOnChange}
         />
     );

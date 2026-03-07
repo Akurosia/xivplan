@@ -8,21 +8,26 @@ import {
     EyeOffRegular,
     EyeRegular,
 } from '@fluentui/react-icons';
-import React, { ReactNode, useCallback } from 'react';
+import React, { ReactNode } from 'react';
 import { useScene } from '../SceneProvider';
+import { EditMode } from '../editMode';
 import { PrefabIcon } from '../prefabs/PrefabIcon';
 import { SceneObject } from '../scene';
+import { useEditMode } from '../useEditMode';
 import { setOrOmit } from '../util';
 import { detailsItemClassNames } from './detailsItemStyles';
+
+export type DetailsItemSize = 'default' | 'nested' | 'field';
 
 export interface DetailsItemProps {
     object: SceneObject;
     icon?: string | ReactNode;
     name: string;
     children?: ReactNode;
-    isNested?: boolean;
     isDragging?: boolean;
     isSelected?: boolean;
+    showControls?: boolean;
+    size?: DetailsItemSize;
 }
 
 // TODO: only show hide button if hidden or hovered/selected
@@ -31,34 +36,51 @@ export const DetailsItem: React.FC<DetailsItemProps> = ({
     object,
     icon,
     name,
-    isNested,
     isDragging,
     isSelected,
     children,
+    showControls,
+    size,
 }) => {
     const classes = useStyles();
+    const [editMode] = useEditMode();
 
-    const size = isNested ? 20 : undefined;
+    const { className, iconSize } = getSizeProps(size ?? 'default', classes);
 
     return (
-        <div className={mergeClasses(classes.wrapper, isNested && classes.nested)}>
-            <div>{icon && <PrefabIcon icon={icon} name={name} width={size} height={size} />}</div>
+        <div className={mergeClasses(classes.wrapper, className)}>
+            <div>{icon && <PrefabIcon icon={icon} name={name} width={iconSize} height={iconSize} />}</div>
             {children ? children : <div className={classes.name}>{name}</div>}
-            {!isNested && (
+            {showControls && (
                 <div className={classes.buttons}>
                     <DetailsItemHideButton
                         object={object}
                         className={mergeClasses(isSelected && classes.selectedButton, isDragging && classes.visible)}
                     />
-                    <DetailsItemDeleteButton
-                        object={object}
-                        className={mergeClasses(isSelected && classes.selectedButton)}
-                    />
+                    {editMode != EditMode.SelectConnection && (
+                        <DetailsItemDeleteButton
+                            object={object}
+                            className={mergeClasses(isSelected && classes.selectedButton)}
+                        />
+                    )}
                 </div>
             )}
         </div>
     );
 };
+
+function getSizeProps(size: DetailsItemSize, classes: ReturnType<typeof useStyles>) {
+    switch (size) {
+        case 'nested':
+            return { className: classes.nested, iconSize: 20 };
+
+        case 'field':
+            return { className: classes.insideField, iconSize: 20 };
+
+        case 'default':
+            return { className: undefined, iconSize: undefined };
+    }
+}
 
 interface DetailsItemHideButtonProps {
     object: SceneObject;
@@ -71,13 +93,10 @@ const EyeIcon = bundleIcon(EyeFilled, EyeRegular);
 const DetailsItemHideButton: React.FC<DetailsItemHideButtonProps> = ({ object, className }) => {
     const classes = useStyles();
     const { dispatch } = useScene();
-    const handleClick = useCallback(
-        (e: React.MouseEvent<HTMLButtonElement>) => {
-            dispatch({ type: 'update', value: setOrOmit(object, 'hide', !object.hide) });
-            e.stopPropagation();
-        },
-        [dispatch, object],
-    );
+    const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+        dispatch({ type: 'update', value: setOrOmit(object, 'hide', !object.hide) });
+        e.stopPropagation();
+    };
 
     const Icon = object.hide ? EyeOffIcon : EyeIcon;
     const tooltip = object.hide ? 'Show' : 'Hide';
@@ -142,6 +161,12 @@ const useStyles = makeStyles({
 
     nested: {
         gap: tokens.spacingHorizontalXS,
+        ...typographyStyles.caption1,
+    },
+
+    insideField: {
+        gap: tokens.spacingHorizontalXXS,
+        padding: '0',
         ...typographyStyles.caption1,
     },
 

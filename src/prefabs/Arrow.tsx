@@ -3,18 +3,19 @@ import { ArrowConfig } from 'konva/lib/shapes/Arrow';
 import * as React from 'react';
 import { Arrow, Group, Rect } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../DropHandler';
+import { getArrowStrokeExtent } from '../arrowUtil';
 import { DetailsItem } from '../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../panel/ListComponentRegistry';
 import { RendererProps, registerRenderer } from '../render/ObjectRegistry';
 import { LayerName } from '../render/layers';
-import { COLOR_RED, SELECTED_PROPS } from '../render/sceneTheme';
 import { ArrowObject, ObjectType } from '../scene';
+import { COLOR_RED } from '../theme';
 import { usePanelDrag } from '../usePanelDrag';
 import { CompositeReplaceGroup } from './CompositeReplaceGroup';
 import { HideCutoutGroup } from './HideGroup';
 import { PrefabIcon } from './PrefabIcon';
 import { ResizeableObjectContainer } from './ResizeableObjectContainer';
-import { useShowHighlight } from './highlight';
+import { useHighlightProps, useOverrideProps } from './highlight';
 
 // TODO: This would be a lot nicer if you could just click on start position
 // and drag to end position instead of having a set initial size/rotation.
@@ -70,18 +71,14 @@ registerDropHandler<ArrowObject>(ObjectType.Arrow, (object, position) => {
 const STROKE_WIDTH = DEFAULT_ARROW_WIDTH / 5;
 const POINTS = [DEFAULT_ARROW_WIDTH / 2, DEFAULT_ARROW_HEIGHT, DEFAULT_ARROW_WIDTH / 2, 0];
 
-const HIGHLIGHT_STROKE_WIDTH = STROKE_WIDTH + (SELECTED_PROPS.strokeWidth ?? 0);
-
 const ArrowRenderer: React.FC<RendererProps<ArrowObject>> = ({ object }) => {
-    const showHighlight = useShowHighlight(object);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
 
-    // respect the stroke width when calculating the pointer width to avoid cropping
     const pointerLength = DEFAULT_ARROW_HEIGHT * 0.15;
-    const tangent = pointerLength / (DEFAULT_ARROW_WIDTH * 0.5);
-    const cotangent = 1 / tangent;
-    const cosecant = 1 / Math.sin(Math.atan(tangent));
-    const lengthOffset = STROKE_WIDTH * 0.5 * (1 + cosecant);
-    const widthOffset = STROKE_WIDTH * (cotangent + cosecant);
+
+    // respect the stroke width when calculating the pointer size to avoid cropping
+    const extent = getArrowStrokeExtent(pointerLength, DEFAULT_ARROW_WIDTH, STROKE_WIDTH);
 
     const arrowProps: ArrowConfig = {
         points: POINTS,
@@ -89,8 +86,8 @@ const ArrowRenderer: React.FC<RendererProps<ArrowObject>> = ({ object }) => {
         height: DEFAULT_ARROW_HEIGHT,
         scaleX: object.width / DEFAULT_ARROW_WIDTH,
         scaleY: object.height / DEFAULT_ARROW_HEIGHT,
-        pointerLength: pointerLength - lengthOffset,
-        pointerWidth: DEFAULT_ARROW_WIDTH - widthOffset,
+        pointerLength: pointerLength - extent.top - extent.bottom,
+        pointerWidth: DEFAULT_ARROW_WIDTH - extent.side * 2,
         strokeWidth: STROKE_WIDTH,
         lineCap: 'round',
         pointerAtBeginning: !!object.arrowBegin,
@@ -100,13 +97,17 @@ const ArrowRenderer: React.FC<RendererProps<ArrowObject>> = ({ object }) => {
     return (
         <ResizeableObjectContainer object={object} transformerProps={{ centeredScaling: true }}>
             {(groupProps) => (
-                <Group {...groupProps} listening={!object.hide}>
-                    {showHighlight && (
-                        <Arrow {...arrowProps} {...SELECTED_PROPS} strokeWidth={HIGHLIGHT_STROKE_WIDTH} />
+                <Group {...groupProps} listening={!object.hide} {...overrideProps}>
+                    {highlightProps && (
+                        <Arrow
+                            {...arrowProps}
+                            {...highlightProps}
+                            strokeWidth={STROKE_WIDTH + (highlightProps.strokeWidth ?? 0)}
+                        />
                     )}
                     <Rect width={object.width} height={object.height} fill="transparent" />
                     <HideCutoutGroup>
-                        <CompositeReplaceGroup enabled={showHighlight} opacity={object.opacity / 100}>
+                        <CompositeReplaceGroup enabled={!!highlightProps} opacity={object.opacity / 100}>
                             <Arrow {...arrowProps} fill={object.color} stroke={object.color} />
                         </CompositeReplaceGroup>
                     </HideCutoutGroup>

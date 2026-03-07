@@ -9,7 +9,7 @@ import {
     tokens,
     useToastController,
 } from '@fluentui/react-components';
-import { useCallback, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useAsync, useDebounce, useLocalStorage } from 'react-use';
 import { MessageToast } from '../MessageToast';
 import { PANEL_PADDING } from './PanelStyles';
@@ -37,7 +37,7 @@ interface Page {
 
 export type Language = 'en' | 'ja' | 'de' | 'fr';
 
-const API_ENDPOINT = 'https://beta.xivapi.com/api/1';
+const API_ENDPOINT = 'https://v2.xivapi.com/api';
 const SEARCH_URL = `${API_ENDPOINT}/search`;
 const ASSET_URL = `${API_ENDPOINT}/asset`;
 
@@ -50,27 +50,19 @@ const LANGUAGE_OPTIONS: Record<Language, string> = {
     de: 'Deutch',
 };
 
-export interface StatusSearchProps {
-    filter: string;
-    onFilterChanged: React.Dispatch<string>;
-}
-
-export const StatusSearch: React.FC<StatusSearchProps> = ({ filter, onFilterChanged }) => {
+export const StatusSearch: React.FC = () => {
     const classes = useStyles();
     const [controller, setController] = useState<AbortController>();
     const [debouncedFilter, setDebouncedFilter] = useState('');
     const [language, setLanguage] = useLocalStorage<Language>('language', 'en');
     const { dispatchToast } = useToastController();
 
-    const selectedLanguage = useMemo(() => [language as string], [language]);
+    const [filter, setFilter] = useState('');
 
-    const setFilter = useCallback(
-        (text?: string) => {
-            controller?.abort();
-            onFilterChanged(text ?? '');
-        },
-        [controller, onFilterChanged],
-    );
+    const handleFilterChanged = (text?: string) => {
+        controller?.abort();
+        setFilter(text ?? '');
+    };
 
     useDebounce(() => setDebouncedFilter(filter), DEBOUNCE_TIME, [filter]);
 
@@ -99,7 +91,7 @@ export const StatusSearch: React.FC<StatusSearchProps> = ({ filter, onFilterChan
                 <Dropdown
                     appearance="underline"
                     value={LANGUAGE_OPTIONS[language ?? 'en']}
-                    selectedOptions={selectedLanguage}
+                    selectedOptions={[language as string]}
                     onOptionSelect={(ev, data) => setLanguage(data.optionValue as Language)}
                 >
                     {Object.entries(LANGUAGE_OPTIONS).map(([lang, text]) => (
@@ -115,7 +107,7 @@ export const StatusSearch: React.FC<StatusSearchProps> = ({ filter, onFilterChan
                 type="text"
                 placeholder="Status name"
                 value={filter}
-                onChange={(ev, data) => setFilter(data.value)}
+                onChange={(ev, data) => handleFilterChanged(data.value)}
             />
 
             {items.loading && <Spinner />}

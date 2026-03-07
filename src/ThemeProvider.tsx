@@ -1,9 +1,8 @@
 import { FluentProvider, makeStyles } from '@fluentui/react-components';
 import React, { PropsWithChildren, useEffect } from 'react';
 import { useLocalStorage, useMedia } from 'react-use';
-import { useSceneThemeStyles } from './render/sceneTheme';
+import { getFluentTheme, usePanelThemeStyle, useSceneThemeStyle } from './theme';
 import { DarkModeContext } from './ThemeContext';
-import { getTheme } from './themes';
 
 export const ThemeProvider: React.FC<PropsWithChildren> = ({ children }) => {
     const prefersDarkMode = useMedia('(prefers-color-scheme: dark)');
@@ -16,9 +15,9 @@ export const ThemeProvider: React.FC<PropsWithChildren> = ({ children }) => {
     }, [classes, darkMode]);
 
     return (
-        <DarkModeContext.Provider value={[!!darkMode, setDarkMode]}>
+        <DarkModeContext value={[!!darkMode, setDarkMode]}>
             <ThemeProviderInner darkMode={darkMode}>{children}</ThemeProviderInner>
-        </DarkModeContext.Provider>
+        </DarkModeContext>
     );
 };
 
@@ -27,10 +26,11 @@ interface ThemeProviderInnerProps extends PropsWithChildren {
 }
 
 const ThemeProviderInner: React.FC<ThemeProviderInnerProps> = ({ darkMode, children }) => {
-    const sceneStyles = useSceneThemeStyles();
+    const sceneStyles = useSceneThemeStyle();
+    const panelStyles = usePanelThemeStyle();
 
     return (
-        <FluentProvider theme={getTheme(darkMode)} style={sceneStyles}>
+        <FluentProvider theme={getFluentTheme(darkMode)} style={{ ...sceneStyles, ...panelStyles }}>
             {children}
         </FluentProvider>
     );

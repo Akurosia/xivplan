@@ -1,4 +1,4 @@
-import { useCallback, useContext } from 'react';
+import { useContext } from 'react';
 
 import { Dispatch, SetStateAction, createContext } from 'react';
 
@@ -14,9 +14,9 @@ export const DialogOpenContext = createContext<DialogOpenState>(() => {});
     const [open, setOpen] = useState(false);
 
     return (
-        <DialogOpenContext.Provider value={setOpen}>
+        <DialogOpenContext value={setOpen}>
             <MyCustomDialog open={open} />
-        </DialogOpenContext.Provider>
+        </DialogOpenContext>
     );
 
     // MyCustomDialog
@@ -33,5 +33,5 @@ export const DialogOpenContext = createContext<DialogOpenState>(() => {});
 export function useCloseDialog() {
     const setOpen = useContext(DialogOpenContext);
 
-    return useCallback(() => setOpen(false), [setOpen]);
+    return () => setOpen(false);
 }

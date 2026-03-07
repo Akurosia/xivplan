@@ -1,6 +1,8 @@
-import { mergeClasses } from '@fluentui/react-components';
-import React, { useMemo } from 'react';
+import { Button, mergeClasses } from '@fluentui/react-components';
+import React from 'react';
+import { ConnectionType } from '../EditModeContext';
 import { useCurrentStep } from '../SceneProvider';
+import { EditMode } from '../editMode';
 import {
     SceneObject,
     UnknownObject,
@@ -11,6 +13,7 @@ import {
     isDrawObject,
     isEnemy,
     isExaflareZone,
+    isEye,
     isIcon,
     isImageObject,
     isInnerRadiusObject,
@@ -26,12 +29,13 @@ import {
     isStarburstZone,
     isTether,
     isText,
-    isTowerZone,
-    isTransparent,
     supportsHollow,
+    supportsStackCount,
 } from '../scene';
 import { getSelectedObjects, useSelection } from '../selection';
+import { useConnectionSelection } from '../useConnectionSelection';
 import { useControlStyles } from '../useControlStyles';
+import { useEditMode } from '../useEditMode';
 import { PropertiesControlProps } from './PropertiesControl';
 import { ArrowPointersControl } from './properties/ArrowControls';
 import { DrawObjectBrushControl } from './properties/BrushControl';
@@ -39,6 +43,7 @@ import { ColorControl, ColorSwatchControl } from './properties/ColorControl';
 import { ConeAngleControl } from './properties/ConeControls';
 import { EnemyRingControl } from './properties/EnemyControls';
 import { ExaflareLengthControl, ExaflareSpacingControl } from './properties/ExaflareControls';
+import { EyeInvertControl } from './properties/EyeControls';
 import { HideControl } from './properties/HideControl';
 import { HollowControl } from './properties/HollowControl';
 import { IconStacksControl, IconTimeControl } from './properties/IconControls';
@@ -48,15 +53,15 @@ import { MarkerShapeControl } from './properties/MarkerControls';
 import { NameControl } from './properties/NameControl';
 import { OpacityControl } from './properties/OpacityControl';
 import { PartyIconControl } from './properties/PartyControls';
-import { PolygonSidesControl } from './properties/PolygonControls';
+import { PolygonOrientationControl, PolygonSidesControl } from './properties/PolygonControls';
 import { PositionControl } from './properties/PositionControl';
 import { InnerRadiusControl, RadiusControl } from './properties/RadiusControl';
 import { RotationControl } from './properties/RotationControl';
 import { SizeControl } from './properties/SizeControl';
+import { StackCountControl } from './properties/StackCountControl';
 import { StarburstSpokeCountControl, StarburstSpokeWidthControl } from './properties/StarburstControls';
 import { TetherTypeControl, TetherWidthControl } from './properties/TetherControls';
-import { TextStyleControl, TextValueControl } from './properties/TextControls';
-import { TowerCountControl } from './properties/TowerControls';
+import { TextLayoutControl, TextOutlineControl, TextValueControl } from './properties/TextControls';
 
 export interface PropertiesPanelProps {
     className?: string;
@@ -72,34 +77,61 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) =
     );
 };
 
-interface ControlConditionProps {
+interface ControlConditionProps<T extends UnknownObject> {
     objects: readonly SceneObject[];
-    test: (object: UnknownObject) => boolean;
+    test: (object: UnknownObject) => object is T;
     invert?: boolean;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    control: React.FC<PropertiesControlProps<any>>;
+    control: React.FC<PropertiesControlProps<T>>;
     className?: string;
 }
 
-const ControlCondition: React.FC<ControlConditionProps> = ({ objects, test, invert, control, className }) => {
-    const isValid = useMemo(() => {
-        const result = objects.every(test);
-
-        return invert ? !result : result;
-    }, [objects, test, invert]);
+function ControlCondition<T>({ objects, test, invert, control, className }: ControlConditionProps<T & UnknownObject>) {
+    const result = objects.every(test);
+    const isValid = invert ? !result : result;
 
     const Control = control;
-    return isValid ? <Control objects={objects} className={className} /> : null;
-};
+    return isValid ? <Control objects={objects as (T & UnknownObject)[]} className={className} /> : null;
+}
 
 const NoObjectsMessage: React.FC = () => {
     return <p>No objects selected.</p>;
 };
 
+interface ConnectionSelectionMessageProps {
+    type: ConnectionType;
+}
+
+const ConnectionSelectionMessage: React.FC<ConnectionSelectionMessageProps> = ({ type }) => {
+    const [, setEditMode] = useEditMode();
+    const message = getConnectionMessage(type);
+
+    return (
+        <>
+            <p>{message}</p>
+            <Button onClick={() => setEditMode(EditMode.Normal)}>Cancel</Button>
+        </>
+    );
+};
+
+function getConnectionMessage(type: ConnectionType) {
+    switch (type) {
+        case ConnectionType.POSITION:
+            return 'Select an object to attach the selection to. The selection or their attachments are not eligible targets.';
+        case ConnectionType.ROTATION:
+            return 'Select an object to make the selection face towards. Objects in the selection are not eligible targets.';
+    }
+}
+
 const Controls: React.FC = () => {
     const classes = useControlStyles();
     const [selection] = useSelection();
     const step = useCurrentStep();
+    const [editMode] = useEditMode();
+    const [{ connectionType }] = useConnectionSelection();
+
+    if (editMode == EditMode.SelectConnection) {
+        return <ConnectionSelectionMessage type={connectionType} />;
+    }
 
     if (selection.size === 0) {
         return <NoObjectsMessage />;
@@ -125,17 +157,13 @@ const Controls: React.FC = () => {
                 <ControlCondition objects={objects} test={isMarker} control={MarkerShapeControl} />
             </div>
             <ControlCondition objects={objects} test={isColored} control={ColorSwatchControl} />
+            <ControlCondition objects={objects} test={isText} control={TextOutlineControl} />
             <div className={mergeClasses(classes.row)}>
-                <ControlCondition
-                    objects={objects}
-                    test={isTransparent}
-                    control={OpacityControl}
-                    className={classes.grow}
-                />
-                <ControlCondition objects={objects} test={isTransparent} control={HideControl} />
+                <OpacityControl objects={objects} className={classes.grow} />
+                <HideControl objects={objects} />
             </div>
             <ControlCondition objects={objects} test={isDrawObject} control={DrawObjectBrushControl} />
-            <ControlCondition objects={objects} test={isText} control={TextStyleControl} />
+            <ControlCondition objects={objects} test={isText} control={TextLayoutControl} />
 
             {/* Position/Size */}
             <ControlCondition objects={objects} test={isMoveable} control={PositionControl} />
@@ -150,12 +178,12 @@ const Controls: React.FC = () => {
                 <ControlCondition objects={objects} test={isStarburstZone} control={StarburstSpokeWidthControl} />
             </div>
 
+            <ControlCondition objects={objects} test={isRotateable} control={RotationControl} />
             <div className={mergeClasses(classes.row, classes.rightGap)}>
-                <ControlCondition objects={objects} test={isRotateable} control={RotationControl} />
                 <ControlCondition objects={objects} test={isEnemy} control={EnemyRingControl} />
-                <ControlCondition objects={objects} test={isStarburstZone} control={StarburstSpokeCountControl} />
-                <ControlCondition objects={objects} test={isPolygonZone} control={PolygonSidesControl} />
                 <ControlCondition objects={objects} test={isExaflareZone} control={ExaflareSpacingControl} />
+                <ControlCondition objects={objects} test={isStarburstZone} control={StarburstSpokeCountControl} />
+
                 <ControlCondition
                     objects={objects}
                     test={(x) => isArcZone(x) || isConeZone(x)}
@@ -164,11 +192,16 @@ const Controls: React.FC = () => {
             </div>
 
             {/* Special options */}
+            <div className={mergeClasses(classes.row, classes.rightGap)}>
+                <ControlCondition objects={objects} test={isPolygonZone} control={PolygonSidesControl} />
+                <ControlCondition objects={objects} test={isPolygonZone} control={PolygonOrientationControl} />
+            </div>
             <ControlCondition objects={objects} test={isParty} control={PartyIconControl} />
             <ControlCondition objects={objects} test={isTether} control={TetherWidthControl} />
             <div className={mergeClasses(classes.row, classes.rightGap)}>
-                <ControlCondition objects={objects} test={isTowerZone} control={TowerCountControl} />
+                <ControlCondition objects={objects} test={supportsStackCount} control={StackCountControl} />
             </div>
+            <ControlCondition objects={objects} test={isEye} control={EyeInvertControl} />
             <ControlCondition objects={objects} test={isText} control={TextValueControl} />
             <div className={mergeClasses(classes.row, classes.rightGap)}>
                 <ControlCondition objects={objects} test={isIcon} control={IconStacksControl} />

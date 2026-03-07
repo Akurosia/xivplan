@@ -1,11 +1,5 @@
 import { Vector2d } from 'konva/lib/types';
 import {
-    DEFAULT_ENEMY_OPACITY,
-    DEFAULT_IMAGE_OPACITY,
-    DEFAULT_MARKER_OPACITY,
-    DEFAULT_PARTY_OPACITY,
-} from '../render/sceneTheme';
-import {
     DrawObject,
     EnemyObject,
     EnemyRingStyle,
@@ -13,16 +7,25 @@ import {
     ImageObject,
     MarkerObject,
     PartyObject,
+    PolygonOrientation,
+    PolygonZone,
     Scene,
     SceneObject,
     SceneStep,
+    StackZone,
+    TextObject,
+    TextStyle,
     isDrawObject,
     isEnemy,
     isExaflareZone,
     isImageObject,
     isMarker,
     isParty,
+    isPolygonZone,
+    isStackZone,
+    isText,
 } from '../scene';
+import { DEFAULT_ENEMY_OPACITY, DEFAULT_IMAGE_OPACITY, DEFAULT_MARKER_OPACITY, DEFAULT_PARTY_OPACITY } from '../theme';
 
 export function upgradeScene(scene: Scene): Scene {
     return {
@@ -63,10 +66,32 @@ function upgradeObject(object: SceneObject): SceneObject {
         object = upgradeMarker(object);
     }
 
+    if (isText(object)) {
+        object = upgradeText(object);
+    }
+
+    if (isPolygonZone(object)) {
+        object = upgradePolygon(object);
+    }
+
+    if (isStackZone(object)) {
+        object = upgradeStackZone(object);
+    }
+
     return object;
 }
 
-function getRingStyle<T extends EnemyObject>(object: T): EnemyRingStyle {
+// EnemyObject was changed from { rotation?: number }
+// to { rotation: number, omniDirection: boolean, opacity: number }, then
+// to { rotation: number, ring: EnemyRingStyle, opacity: number }
+type LegacyEnemyObject = Omit<EnemyObject, 'opacity' | 'rotation' | 'ring'> & {
+    opacity?: number;
+    rotation?: number;
+    omniDirection?: boolean;
+    ring?: EnemyRingStyle;
+};
+
+function getRingStyle<T extends LegacyEnemyObject>(object: T): EnemyRingStyle {
     if (object.rotation === undefined) {
         return EnemyRingStyle.NoDirection;
     }
@@ -78,31 +103,29 @@ function getRingStyle<T extends EnemyObject>(object: T): EnemyRingStyle {
     return EnemyRingStyle.Directional;
 }
 
-function upgradeEnemy<T extends EnemyObject>(object: T): T {
-    // enemy was changed from { rotation?: number }
-    // to { rotation: number, omniDirection: boolean, opacity: number }, then
-    // to { rotation: number, ring: EnemyRingStyle, opacity: number }
+function upgradeEnemy(object: LegacyEnemyObject): EnemyObject {
     return {
         ...object,
         rotation: object.rotation ?? 0,
-        ring: getRingStyle(object),
+        ring: object.ring ?? getRingStyle(object),
         opacity: object.opacity ?? DEFAULT_ENEMY_OPACITY,
     };
 }
 
-interface DrawObjectV1 {
+// DrawObject was changed from { points: Vector2d[] }
+// to { points: number[] }
+type DrawObjectV1 = Omit<DrawObject, 'points'> & {
     points: readonly Vector2d[];
+};
+
+function isDrawObjectV1(object: DrawObject | DrawObjectV1): object is DrawObjectV1 {
+    return object.points.length > 0 && typeof object.points[0] === 'object';
 }
 
-function upgradeDrawObject<T extends DrawObject>(object: T): T {
-    // draw object was changed from { points: Vector2d[] }
-    // to { points: number[] }
-
-    if (typeof object.points[0] === 'object') {
-        const v1 = object as unknown as DrawObjectV1;
-
+function upgradeDrawObject(object: DrawObject | DrawObjectV1): DrawObject {
+    if (isDrawObjectV1(object)) {
         const points: number[] = [];
-        for (const point of v1.points) {
+        for (const point of object.points) {
             points.push(point.x, point.y);
         }
 
@@ -112,35 +135,102 @@ function upgradeDrawObject<T extends DrawObject>(object: T): T {
     return object;
 }
 
+const DEPRECATED_IMAGE_PATTERNS = [
+    /https:\/\/xivapi\.com\/i\/(\w+)\/(\w+)\.png/,
+    /https:\/\/beta\.xivapi\.com\/api\/1\/.*\/(\w+)\/(\w+)\.tex\?format=png/,
+];
+
+// opacity property was added to ImageObject.
+// Status icons from legacy XIVAPI did not support CORS and would not render.
+// The beta XIVAPI is now broken and replaced by V2.
 function upgradeImageObject<T extends ImageObject>(object: T): T {
-    // Replace status icons from XIVAPI with ones from the beta API that support CORS.
-    const image = object.image.replace(/https:\/\/xivapi.com\/i\/(\w+)\/(\w+)\.png/, (match, folder, name) => {
-        return `https://beta.xivapi.com/api/1/asset/ui/icon/${folder}/${name}.tex?format=png`;
-    });
+    // Replace status icons from the XIVAPI V1 or beta APIs with ones from the V2 API.
+    let image = object.image;
+
+    for (const pattern of DEPRECATED_IMAGE_PATTERNS) {
+        image = image.replace(pattern, (match, folder, name) => {
+            return `https://v2.xivapi.com/api/asset/ui/icon/${folder}/${name}.tex?format=png`;
+        });
+    }
 
     return {
+        opacity: DEFAULT_IMAGE_OPACITY,
         ...object,
         image,
-        opacity: object.opacity ?? DEFAULT_IMAGE_OPACITY,
     };
 }
 
-const LEGACY_SPACING = 60;
+// spacing property was added to ExaflareZone
+type LegacyExaflareZone = Omit<ExaflareZone, 'spacing'> & {
+    spacing?: number;
+};
 
-function upgradeExaflareZone(object: ExaflareZone): ExaflareZone {
-    return { ...object, spacing: object.spacing ?? LEGACY_SPACING };
-}
-
-function upgradeMarker(object: MarkerObject): MarkerObject {
+function upgradeExaflareZone(object: LegacyExaflareZone): ExaflareZone {
     return {
+        spacing: 60,
         ...object,
-        opacity: object.opacity ?? DEFAULT_MARKER_OPACITY,
     };
 }
 
-function upgradeParty(object: PartyObject): PartyObject {
+// opacity property was added to MarkerObject
+type LegacyMarkerObject = Omit<MarkerObject, 'opacity'> & {
+    opacity?: number;
+};
+
+function upgradeMarker(object: LegacyMarkerObject): MarkerObject {
     return {
+        opacity: DEFAULT_MARKER_OPACITY,
         ...object,
-        opacity: object.opacity ?? DEFAULT_PARTY_OPACITY,
+    };
+}
+
+// opacity property was added to PartyObject
+type LegacyPartyObject = Omit<PartyObject, 'opacity'> & {
+    opacity?: number;
+};
+
+function upgradeParty(object: LegacyPartyObject): PartyObject {
+    return {
+        opacity: DEFAULT_PARTY_OPACITY,
+        ...object,
+    };
+}
+
+// stroke and style properties were added to TextObject
+type LegacyTextObject = Omit<TextObject, 'stroke' | 'style'> & {
+    stroke?: string;
+    style?: TextStyle;
+};
+
+function upgradeText(object: LegacyTextObject): TextObject {
+    return {
+        stroke: '#40352c',
+        style: 'outline',
+        ...object,
+    };
+}
+
+// orient property was added to PolygonZone
+type LegacyPolygonZone = Omit<PolygonZone, 'orient'> & {
+    orient?: PolygonOrientation;
+};
+
+function upgradePolygon(object: LegacyPolygonZone): PolygonZone {
+    return {
+        orient: 'point',
+        ...object,
+    };
+}
+
+// StackZone was split off from CircleZone
+// count property was added
+type LegacyStackZone = Omit<StackZone, 'count'> & {
+    count?: number;
+};
+
+function upgradeStackZone(object: LegacyStackZone): StackZone {
+    return {
+        count: 1,
+        ...object,
     };
 }

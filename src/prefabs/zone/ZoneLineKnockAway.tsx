@@ -1,5 +1,5 @@
 import Konva from 'konva';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { Group, Rect } from 'react-konva';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
 import Icon from '../../assets/zone/line_knock_away.svg?react';
@@ -7,13 +7,13 @@ import { DetailsItem } from '../../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
 import { LayerName } from '../../render/layers';
-import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, sceneVars, SELECTED_PROPS } from '../../render/sceneTheme';
 import { ObjectType, RectangleZone } from '../../scene';
+import { DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
 import { HideGroup } from '../HideGroup';
 import { PrefabIcon } from '../PrefabIcon';
 import { ResizeableObjectContainer } from '../ResizeableObjectContainer';
-import { useShowHighlight } from '../highlight';
+import { useHighlightProps, useOverrideProps } from '../highlight';
 import { ChevronConfig, ChevronTail } from './shapes';
 import { getArrowStyle, getZoneStyle } from './style';
 
@@ -66,33 +66,29 @@ const ARROW_HEIGHT_FRAC = 3 / 5;
 const ARROW_PAD = 0.08;
 
 const LineKnockAwayRenderer: React.FC<RendererProps<RectangleZone>> = ({ object }) => {
-    const showHighlight = useShowHighlight(object);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
     const [pattern, setPattern] = useState<HTMLImageElement>();
-    const style = useMemo(
-        () => getZoneStyle(object.color, object.opacity, Math.min(object.width, object.height)),
-        [object.color, object.opacity, object.width, object.height],
-    );
+    const style = getZoneStyle(object.color, object.opacity, Math.min(object.width, object.height));
     const { fill, ...stroke } = style;
 
     const patternWidth = object.width;
     const patternHeight = object.width / 2;
 
-    const arrow = useMemo(() => {
-        const width = patternWidth * ARROW_SIZE_FRAC;
-        const height = width * ARROW_HEIGHT_FRAC;
+    const width = patternWidth * ARROW_SIZE_FRAC;
+    const height = width * ARROW_HEIGHT_FRAC;
 
-        return {
-            ...getArrowStyle(object.color, object.opacity * 3),
-            width,
-            height,
-            y: patternHeight / 2,
-            chevronAngle: 40,
-            opacity: (object.opacity * 2) / 100,
-        } as ChevronConfig;
-    }, [object.color, object.opacity, patternWidth, patternHeight]);
+    const arrow: ChevronConfig = {
+        ...getArrowStyle(object.color, object.opacity * 3),
+        width,
+        height,
+        y: patternHeight / 2,
+        chevronAngle: 40,
+        opacity: (object.opacity * 2) / 100,
+    };
 
     const arrowRef = useRef<Konva.Group>(null);
-    useEffect(() => {
+    useLayoutEffect(() => {
         arrowRef.current?.toImage({
             // This seems like a hack. Is there a better way to draw offscreen?
             x: OFFSCREEN_X,
@@ -111,14 +107,14 @@ const LineKnockAwayRenderer: React.FC<RendererProps<RectangleZone>> = ({ object 
         <>
             <ResizeableObjectContainer object={object} transformerProps={{ keepRatio: false }}>
                 {(groupProps) => (
-                    <Group {...groupProps}>
-                        {showHighlight && (
+                    <Group {...groupProps} {...overrideProps}>
+                        {highlightProps && (
                             <Rect
                                 offsetX={highlightOffset / 2}
                                 offsetY={highlightOffset / 2}
                                 width={highlightWidth}
                                 height={highlightHeight}
-                                {...SELECTED_PROPS}
+                                {...highlightProps}
                             />
                         )}
                         <HideGroup>
@@ -151,7 +147,7 @@ registerRenderer<RectangleZone>(ObjectType.LineKnockAway, LayerName.Ground, Line
 const LineKnockAwayDetails: React.FC<ListComponentProps<RectangleZone>> = ({ object, ...props }) => {
     return (
         <DetailsItem
-            icon={<Icon width="100%" height="100%" style={{ [sceneVars.colorZoneOrange]: object.color }} />}
+            icon={<Icon width="100%" height="100%" style={{ [panelVars.colorZoneOrange]: object.color }} />}
             name="Line knock away"
             object={object}
             {...props}

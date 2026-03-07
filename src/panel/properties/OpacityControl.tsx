@@ -1,31 +1,29 @@
-import React, { useCallback, useMemo } from 'react';
+import React from 'react';
 import { OpacitySlider } from '../../OpacitySlider';
+import { SceneObject } from '../../scene';
 import { useScene } from '../../SceneProvider';
-import { TransparentObject } from '../../scene';
 import { commonValue } from '../../util';
 import { PropertiesControlProps } from '../PropertiesControl';
 
-export const OpacityControl: React.FC<PropertiesControlProps<TransparentObject>> = ({ objects, className }) => {
+export const OpacityControl: React.FC<PropertiesControlProps<SceneObject>> = ({ objects, className }) => {
     const { dispatch } = useScene();
 
-    const opacity = useMemo(() => commonValue(objects, (obj) => obj.opacity), [objects]);
-    const hide = useMemo(() => commonValue(objects, (obj) => !!obj.hide), [objects]);
+    const opacity = commonValue(objects, (obj) => obj.opacity);
+    const hide = commonValue(objects, (obj) => !!obj.hide);
 
-    const setOpacity = useCallback(
-        (newOpacity: number) => {
-            if (newOpacity !== opacity) {
-                dispatch({ type: 'update', value: objects.map((obj) => ({ ...obj, opacity: newOpacity })) });
-            }
-        },
-        [dispatch, objects, opacity],
-    );
+    const setOpacity = (newOpacity: number, transient: boolean) => {
+        if (newOpacity !== opacity) {
+            dispatch({ type: 'update', value: objects.map((obj) => ({ ...obj, opacity: newOpacity })), transient });
+        }
+    };
 
     return (
         <OpacitySlider
             className={className}
             value={opacity}
             disabled={hide}
-            onChange={(ev, data) => setOpacity(data.value)}
+            onChange={(ev, data) => setOpacity(data.value, data.transient)}
+            onCommit={() => dispatch({ type: 'commit' })}
         />
     );
 };

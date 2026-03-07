@@ -1,38 +1,39 @@
 import { DrawImageRegular } from '@fluentui/react-icons';
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Group, Line } from 'react-konva';
 import { DetailsItem } from '../panel/DetailsItem';
 import { ListComponentProps, registerListComponent } from '../panel/ListComponentRegistry';
 import { RendererProps, registerRenderer } from '../render/ObjectRegistry';
 import { LayerName } from '../render/layers';
-import { HIGHLIGHT_WIDTH, SELECTED_PROPS } from '../render/sceneTheme';
 import { DrawObject, ObjectType } from '../scene';
+import { HIGHLIGHT_WIDTH } from '../theme';
 import { DRAW_LINE_PROPS } from './DrawObjectStyles';
 import { HideCutoutGroup } from './HideGroup';
 import { ResizeableObjectContainer } from './ResizeableObjectContainer';
-import { useShowHighlight } from './highlight';
+import { useHighlightProps, useOverrideProps } from './highlight';
 
 function getLinePoints(object: DrawObject) {
     return object.points.map((v, i) => v * (i % 2 === 0 ? object.width : -object.height));
 }
 
 export const DrawObjectRenderer: React.FC<RendererProps<DrawObject>> = ({ object }) => {
-    const showHighlight = useShowHighlight(object);
-    const points = useMemo(() => getLinePoints(object), [object]);
+    const highlightProps = useHighlightProps(object);
+    const overrideProps = useOverrideProps(object);
+    const points = getLinePoints(object);
 
     return (
         <ResizeableObjectContainer
             object={object}
             cache
-            cacheKey={showHighlight}
+            cacheKey={highlightProps}
             transformerProps={{ centeredScaling: true }}
         >
             {(groupProps) => (
-                <Group {...groupProps} offsetX={0} offsetY={0} opacity={object.opacity / 100}>
-                    {showHighlight && (
+                <Group {...groupProps} offsetX={0} offsetY={0} opacity={object.opacity / 100} {...overrideProps}>
+                    {highlightProps && (
                         <Line
                             {...DRAW_LINE_PROPS}
-                            {...SELECTED_PROPS}
+                            {...highlightProps}
                             points={points}
                             strokeWidth={object.brushSize + HIGHLIGHT_WIDTH}
                         />
