@@ -1,7 +1,7 @@
 import { use, useEffect } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { jsonToScene, sceneToText, textToScene } from '../file';
-import { Scene } from '../scene';
+import type { Scene } from '../scene';
 
 export function getShareLink(scene: Scene): string {
     const data = sceneToText(scene);
@@ -101,6 +101,6 @@ export function useSceneFromUrl(): Scene | undefined {
     return undefined;
 }
 
-export function useSceneLoadError(): Error | string | unknown | undefined {
+export function getSceneLoadError(): Error | string | unknown | undefined {
     return sceneError;
 }

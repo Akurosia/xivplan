@@ -1,12 +1,12 @@
 import { Button, Link, Text, Tooltip, makeStyles, mergeClasses, tokens } from '@fluentui/react-components';
 import { WeatherMoonFilled, WeatherSunnyFilled } from '@fluentui/react-icons';
-import React, { HTMLAttributes, useContext } from 'react';
+import React, { type HTMLAttributes, use } from 'react';
 import { OutPortal } from 'react-reverse-portal';
 import { AboutDialog } from './AboutDialog';
 import { ExternalLink } from './ExternalLink';
 import { HelpContext } from './HelpContext';
 import { PANEL_WIDTH } from './panel/PanelStyles';
-import { FileSource, useScene } from './SceneProvider';
+import { type FileSource, useScene } from './SceneProvider';
 import { DarkModeContext } from './ThemeContext';
 import { ToolbarContext } from './ToolbarContext';
 import { useIsDirty } from './useIsDirty';
@@ -65,9 +65,9 @@ const useStyles = makeStyles({
 export const SiteHeader: React.FC<HTMLAttributes<HTMLElement>> = ({ className, ...props }) => {
     const classes = useStyles();
     const { source } = useScene();
-    const toolbarNode = useContext(ToolbarContext);
-    const [, setHelpOpen] = useContext(HelpContext);
-    const [darkMode, setDarkMode] = useContext(DarkModeContext);
+    const toolbarNode = use(ToolbarContext);
+    const [, setHelpOpen] = use(HelpContext);
+    const [darkMode, setDarkMode] = use(DarkModeContext);
 
     const titleSize = source ? 400 : 500;
 

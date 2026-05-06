@@ -3,14 +3,15 @@ import { CircleFilled, CircleRegular } from '@fluentui/react-icons';
 import React from 'react';
 import { useScene } from '../../SceneProvider';
 import { Segment, SegmentedGroup } from '../../Segmented';
-import { HollowObject } from '../../scene';
-import { commonValue, setOrOmit } from '../../util';
-import { PropertiesControlProps } from '../PropertiesControl';
+import type { HollowObject } from '../../scene';
+import { commonValue, setOrOmit, type Enum } from '../../util';
+import type { PropertiesControlProps } from '../PropertiesControl';
 
-enum Styles {
-    Solid = 'solid',
-    Hollow = 'hollow',
-}
+const Styles = {
+    Solid: 'solid',
+    Hollow: 'hollow',
+} as const;
+type Styles = Enum<typeof Styles>;
 
 export const HollowControl: React.FC<PropertiesControlProps<HollowObject>> = ({ objects }) => {
     const { dispatch } = useScene();

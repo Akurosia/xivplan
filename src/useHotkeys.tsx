@@ -1,13 +1,14 @@
-import { RefObject, useContext, useEffect } from 'react';
-import { HotkeyCallback, Options, useHotkeys as useHotkeysBase, useHotkeysContext } from 'react-hotkeys-hook';
-import { HotkeyHelpContext, HotkeyInfo } from './HotkeyHelpContext';
+import { type RefObject, use, useEffect } from 'react';
+import { type HotkeyCallback, type Options, useHotkeys as useHotkeysBase, useHotkeysContext } from 'react-hotkeys-hook';
+import { HotkeyHelpContext, type HotkeyInfo } from './HotkeyHelpContext';
 import { useCancelConnectionSelection } from './useEditMode';
-import { rotateArray } from './util';
+import { type Enum, rotateArray } from './util';
 
-export enum HotkeyScopes {
-    AlwaysEnabled = 'alwaysEnabled', // Workaround for https://github.com/JohannesKlauss/react-hotkeys-hook/issues/908
-    Default = 'default',
-}
+export const HotkeyScopes = {
+    AlwaysEnabled: 'alwaysEnabled', // Workaround for https://github.com/JohannesKlauss/react-hotkeys-hook/issues/908
+    Default: 'default',
+} as const;
+export type HotkeyScopes = Enum<typeof HotkeyScopes>;
 
 export function useHotkeys<T extends HTMLElement>(
     keys: string,
@@ -49,7 +50,7 @@ export function useHotkeys<T extends HTMLElement>(
 }
 
 export function useHotkeyHelp(info: HotkeyInfo): void {
-    const map = useContext(HotkeyHelpContext);
+    const map = use(HotkeyHelpContext);
     useEffect(() => {
         if (!info.keys || !info.category || !info.help) {
             return;
@@ -65,7 +66,7 @@ export function useHotkeyHelp(info: HotkeyInfo): void {
 }
 
 export function useRegisteredHotkeys(): HotkeyInfo[] {
-    const map = useContext(HotkeyHelpContext);
+    const map = use(HotkeyHelpContext);
     return [...map.values()].sort((a, b) => {
         return a.sortKey.localeCompare(b.sortKey);
     });

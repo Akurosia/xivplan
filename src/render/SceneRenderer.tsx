@@ -1,17 +1,17 @@
 import Konva from 'konva';
-import { KonvaEventObject } from 'konva/lib/Node';
-import React, { PropsWithChildren, RefAttributes, useContext, useState } from 'react';
+import type { KonvaEventObject } from 'konva/lib/Node';
+import React, { type PropsWithChildren, type RefAttributes, use, useState } from 'react';
 import { Layer, Stage } from 'react-konva';
 import { DefaultCursorProvider } from '../DefaultCursorProvider';
 import { getDropAction } from '../DropHandler';
 import { SceneHotkeyHandler } from '../HotkeyHandler';
-import { EditorState, SceneAction, SceneContext, useCurrentStep, useScene } from '../SceneProvider';
-import { SelectionContext, SelectionState, SpotlightContext } from '../SelectionContext';
+import { type EditorState, type SceneAction, SceneContext, useCurrentStep, useScene } from '../SceneProvider';
+import { SelectionContext, type SelectionState, SpotlightContext } from '../SelectionContext';
 import { getCanvasSize, getSceneCoord } from '../coord';
 import { EditMode } from '../editMode';
-import { Scene } from '../scene';
+import type { Scene } from '../scene';
 import { selectNewObjects, selectNone, useSelection } from '../selection';
-import { UndoContext } from '../undo/undoContext';
+import type { UndoContext } from '../undo/undoContext';
 import { useEditMode } from '../useEditMode';
 import { usePanelDrag } from '../usePanelDrag';
 import { ArenaRenderer } from './ArenaRenderer';
@@ -23,9 +23,9 @@ import { LayerName } from './layers';
 
 export const SceneRenderer: React.FC = () => {
     const { scene } = useScene();
-    const [, setSelection] = useContext(SelectionContext);
+    const [, setSelection] = use(SelectionContext);
     const size = getCanvasSize(scene);
-    const [stage, stageRef] = useState<Konva.Stage | null>(null);
+    const [stage, setStage] = useState<Konva.Stage | null>(null);
     const [editMode] = useEditMode();
 
     const onClickStage = (e: KonvaEventObject<MouseEvent>) => {
@@ -45,7 +45,7 @@ export const SceneRenderer: React.FC = () => {
 
     return (
         <DropTarget stage={stage}>
-            <Stage {...size} ref={stageRef} onClick={onClickStage}>
+            <Stage {...size} ref={setStage} onClick={onClickStage}>
                 <StageContext value={stage}>
                     <DefaultCursorProvider>
                         <SceneContents />

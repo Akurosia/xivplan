@@ -1,11 +1,11 @@
 import { Stage } from 'konva/lib/Stage';
-import { Vector2d } from 'konva/lib/types';
-import React, { Dispatch, SetStateAction, useContext, useState } from 'react';
-import { HotkeyCallback } from 'react-hotkeys-hook';
+import type { Vector2d } from 'konva/lib/types';
+import React, { type Dispatch, type SetStateAction, use, useState } from 'react';
+import type { HotkeyCallback } from 'react-hotkeys-hook';
 import { HelpContext } from './HelpContext';
 import { HelpDialog } from './HelpDialog';
-import { GroupMoveAction, SceneAction, useScene } from './SceneProvider';
-import { SceneSelection } from './SelectionContext';
+import { type GroupMoveAction, type SceneAction, useScene } from './SceneProvider';
+import type { SceneSelection } from './SelectionContext';
 import { omitInterconnectedObjects } from './connections';
 import { getAbsolutePosition, getSceneCoord, makeRelative, rotateCoord } from './coord';
 import { copyObjects, getGroupCenter } from './copy';
@@ -13,7 +13,15 @@ import { EditMode } from './editMode';
 import { moveObjectsBy } from './groupOperations';
 import { makeTethers } from './prefabs/TetherConfig';
 import { useStage } from './render/stage';
-import { MoveableObject, Scene, SceneObject, TetherType, isMoveable, isRotateable } from './scene';
+import {
+    type MoveableObject,
+    type Scene,
+    type SceneObject,
+    type SceneStep,
+    TetherType,
+    isMoveable,
+    isRotateable,
+} from './scene';
 import { getSelectedObjects, selectAll, selectNewObjects, selectNone, useSelection } from './selection';
 import { useCancelConnectionSelection, useEditMode } from './useEditMode';
 import { useHotkeyHelp, useHotkeys } from './useHotkeys';
@@ -53,6 +61,7 @@ const UndoRedoHandler: React.FC = () => {
 function pasteObjects(
     stage: Stage,
     scene: Scene,
+    step: SceneStep,
     dispatch: Dispatch<SceneAction>,
     setSelection: Dispatch<SetStateAction<SceneSelection>>,
     objects: readonly SceneObject[],
@@ -60,7 +69,7 @@ function pasteObjects(
 ): void {
     const pointerPosition = stage.getRelativePointerPosition() ?? { x: 0, y: 0 };
     const newCenter = centerOnMouse ? getSceneCoord(scene, pointerPosition) : undefined;
-    const { objects: newObjects } = copyObjects(scene, objects, newCenter);
+    const { objects: newObjects } = copyObjects(scene, step, objects, newCenter);
 
     if (newObjects.length) {
         dispatch({ type: 'add', object: newObjects });
@@ -172,10 +181,10 @@ const SelectionActionHandler: React.FC = () => {
             if (!clipboard.length || !stage || editMode !== EditMode.Normal) {
                 return;
             }
-            pasteObjects(stage, scene, dispatch, setSelection, clipboard);
+            pasteObjects(stage, scene, step, dispatch, setSelection, clipboard);
             e.preventDefault();
         },
-        [stage, scene, dispatch, setSelection, clipboard, editMode],
+        [stage, scene, step, dispatch, setSelection, clipboard, editMode],
     );
 
     useHotkeys(
@@ -185,10 +194,10 @@ const SelectionActionHandler: React.FC = () => {
             if (!clipboard.length || !stage || editMode !== EditMode.Normal) {
                 return;
             }
-            pasteObjects(stage, scene, dispatch, setSelection, clipboard, false);
+            pasteObjects(stage, scene, step, dispatch, setSelection, clipboard, false);
             e.preventDefault();
         },
-        [stage, scene, dispatch, setSelection, clipboard, editMode],
+        [stage, scene, step, dispatch, setSelection, clipboard, editMode],
     );
 
     useHotkeys(
@@ -198,7 +207,7 @@ const SelectionActionHandler: React.FC = () => {
             if (!selection.size || !stage || editMode !== EditMode.Normal) {
                 return;
             }
-            pasteObjects(stage, scene, dispatch, setSelection, getSelectedObjects(step, selection), false);
+            pasteObjects(stage, scene, step, dispatch, setSelection, getSelectedObjects(step, selection), false);
             e.preventDefault();
         },
         [stage, scene, step, dispatch, selection, setSelection, editMode],
@@ -416,7 +425,7 @@ const EditActionHandler: React.FC = () => {
 };
 
 const HelpHandler: React.FC = () => {
-    const [open, setOpen] = useContext(HelpContext);
+    const [open, setOpen] = use(HelpContext);
 
     useHotkeys(
         'f1',

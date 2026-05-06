@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from 'react';
-import { createContext, Dispatch, PropsWithChildren, SetStateAction, useContext, useState } from 'react';
+import { createContext, type Dispatch, type PropsWithChildren, type SetStateAction, use, useState } from 'react';
 import {
     DefaultAttachPosition,
     getDefaultAttachmentSettings,
@@ -10,23 +10,23 @@ import {
 import { getAbsolutePosition, getAbsoluteRotation } from './coord';
 import { copyObjects } from './copy';
 import {
-    Arena,
+    type Arena,
     ArenaShape,
     DEFAULT_SCENE,
-    Grid,
+    type Grid,
     isMoveable,
     isRotateable,
     isTether,
-    MoveableObject,
-    Scene,
-    SceneObject,
-    SceneObjectWithoutId,
-    SceneStep,
-    Tether,
-    Ticks,
+    type MoveableObject,
+    type Scene,
+    type SceneObject,
+    type SceneObjectWithoutId,
+    type SceneStep,
+    type Tether,
+    type Ticks,
 } from './scene';
 import { createUndoContext } from './undo/undoContext';
-import { StateActionBase, UndoRedoAction } from './undo/undoReducer';
+import type { StateActionBase, UndoRedoAction } from './undo/undoReducer';
 import { useSetSavedState } from './useIsDirty';
 import { asArray, clamp, omit } from './util';
 
@@ -228,7 +228,7 @@ export interface SceneContext {
 
 export function useScene(): SceneContext {
     const [transientPresent, present, dispatch] = usePresent();
-    const [source] = useContext(SourceContext);
+    const [source] = use(SourceContext);
 
     return {
         scene: transientPresent.scene,
@@ -250,7 +250,7 @@ export const useSceneUndoRedoPossible = useUndoRedoPossible;
 export function useLoadScene(): (scene: Scene, source?: FileSource) => void {
     const { dispatch } = useScene();
     const setSavedState = useSetSavedState();
-    const [, setSource] = useContext(SourceContext);
+    const [, setSource] = use(SourceContext);
 
     return (scene: Scene, source?: FileSource) => {
         dispatch({ type: 'reset', state: { scene, currentStep: 0 } });
@@ -260,7 +260,7 @@ export function useLoadScene(): (scene: Scene, source?: FileSource) => void {
 }
 
 export function useSetSource(): Dispatch<SetStateAction<FileSource | undefined>> {
-    const [, setSource] = useContext(SourceContext);
+    const [, setSource] = use(SourceContext);
     return setSource;
 }
 
@@ -355,7 +355,7 @@ function setStep(state: Readonly<EditorState>, index: number): EditorState {
 }
 
 function addStep(state: Readonly<EditorState>, after: number): EditorState {
-    const { objects, nextId } = copyObjects(state.scene, getCurrentStep(state).objects);
+    const { objects, nextId } = copyObjects(state.scene, undefined, getCurrentStep(state).objects);
 
     const newStep: SceneStep = { objects };
 

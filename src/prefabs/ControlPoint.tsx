@@ -1,13 +1,14 @@
 import Konva from 'konva';
-import { KonvaEventObject } from 'konva/lib/Node';
-import { Vector2d } from 'konva/lib/types';
+import type { KonvaEventObject } from 'konva/lib/Node';
+import type { Vector2d } from 'konva/lib/types';
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Group } from 'react-konva';
 import { useScene } from '../SceneProvider';
 import { getCanvasCoord, rotateCoord } from '../coord';
 import { ControlsPortal } from '../render/Portals';
 import { useStage } from '../render/stage';
-import { Scene } from '../scene';
+import type { Scene } from '../scene';
+import type { Enum } from '../util';
 import { Handle } from './Handle';
 
 // https://github.com/ArnaudBarre/eslint-plugin-react-refresh/issues/103
@@ -15,10 +16,11 @@ import { Handle } from './Handle';
 
 export const CONTROL_POINT_BORDER_COLOR = '#00a1ff';
 
-export enum HandleStyle {
-    Square,
-    Diamond,
-}
+export const HandleStyle = {
+    Square: 0,
+    Diamond: 1,
+} as const;
+export type HandleStyle = Enum<typeof HandleStyle>;
 
 export interface Handle extends Vector2d {
     readonly id: number;

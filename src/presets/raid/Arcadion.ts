@@ -1,4 +1,4 @@
-import { ArenaPreset, ArenaShape, DEFAULT_ARENA_PADDING, GridType } from '../../scene';
+import { type ArenaPreset, ArenaShape, DEFAULT_ARENA_PADDING, GridType } from '../../scene';
 
 const PRESET_2: ArenaPreset = {
     name: 'AAC Light-heavyweight M2',
@@ -232,6 +232,32 @@ const PRESET_11_SPLIT: ArenaPreset = {
     },
 };
 
+const PRESET_12: ArenaPreset = {
+    name: 'AAC Heavyweight M4',
+    spoilerFreeName: 'AAC Heavyweight M4 ████',
+    arena: {
+        shape: ArenaShape.Rectangle,
+        width: 800,
+        height: 600,
+        padding: DEFAULT_ARENA_PADDING,
+        grid: { type: GridType.None },
+        backgroundImage: '/arena/arcadion12.svg',
+    },
+};
+
+const PRESET_12_PHASE_2: ArenaPreset = {
+    name: 'AAC Heavyweight M4 (Phase 2)',
+    spoilerFreeName: 'AAC Heavyweight M4 ████',
+    arena: {
+        shape: ArenaShape.None,
+        width: 800,
+        height: 800,
+        padding: 20,
+        grid: { type: GridType.None },
+        backgroundImage: '/arena/arcadion12-p2.svg',
+    },
+};
+
 export const ARENA_PRESETS_RAID_ARCADION = [
     PRESET_2,
     PRESET_3,
@@ -251,4 +277,6 @@ export const ARENA_PRESETS_RAID_ARCADION = [
     PRESET_8_SAVAGE_PHASE_2_MIRROR,
     PRESET_11,
     PRESET_11_SPLIT,
+    PRESET_12,
+    PRESET_12_PHASE_2,
 ];

@@ -5,19 +5,24 @@ import { getAbsoluteRotation, getBaseFacingRotation, getPointerAngle, snapAngle 
 import { getResizeCursor } from '../../cursor';
 import { getDragOffset, registerDropHandler } from '../../DropHandler';
 import { DetailsItem } from '../../panel/DetailsItem';
-import { ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
+import { type ListComponentProps, registerListComponent } from '../../panel/ListComponentRegistry';
 import { LayerName } from '../../render/layers';
-import { registerRenderer, RendererProps } from '../../render/ObjectRegistry';
+import { registerRenderer, type RendererProps } from '../../render/ObjectRegistry';
 import { ActivePortal } from '../../render/Portals';
-import { LineZone, ObjectType, Scene } from '../../scene';
+import { type LineZone, ObjectType, type Scene } from '../../scene';
 import { useScene } from '../../SceneProvider';
 import { useIsDragging } from '../../selection';
 import { CENTER_DOT_RADIUS, DEFAULT_AOE_COLOR, DEFAULT_AOE_OPACITY, panelVars } from '../../theme';
 import { usePanelDrag } from '../../usePanelDrag';
-import { clampRotation, mod360 } from '../../util';
+import { clampRotation, type Enum, mod360 } from '../../util';
 import { distance, getDistanceFromLine, VEC_ZERO, vecAtAngle } from '../../vector';
 import { MIN_LINE_LENGTH, MIN_LINE_WIDTH } from '../bounds';
-import { CONTROL_POINT_BORDER_COLOR, createControlPointManager, HandleFuncProps, HandleStyle } from '../ControlPoint';
+import {
+    CONTROL_POINT_BORDER_COLOR,
+    createControlPointManager,
+    type HandleFuncProps,
+    HandleStyle,
+} from '../ControlPoint';
 import { DraggableObject } from '../DraggableObject';
 import { HideGroup } from '../HideGroup';
 import { useHighlightProps, useOverrideProps, useShowResizer } from '../highlight';
@@ -83,10 +88,11 @@ const LineDetails: React.FC<ListComponentProps<LineZone>> = ({ object, ...props 
 
 registerListComponent<LineZone>(ObjectType.Line, LineDetails);
 
-enum HandleId {
-    Length,
-    Width,
-}
+const HandleId = {
+    Length: 0,
+    Width: 1,
+} as const;
+type HandleId = Enum<typeof HandleId>;
 
 interface LineState {
     length: number;

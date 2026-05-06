@@ -4,15 +4,22 @@ import { useScene } from '../SceneProvider';
 import { getAbsoluteRotation, getBaseFacingRotation, getPointerAngle, snapAngle } from '../coord';
 import { getResizeCursor } from '../cursor';
 import { ActivePortal } from '../render/Portals';
-import { InnerRadiusObject, RadiusObject, Scene, SceneObject, UnknownObject, isRotateable } from '../scene';
+import {
+    type InnerRadiusObject,
+    type RadiusObject,
+    type Scene,
+    type SceneObject,
+    type UnknownObject,
+    isRotateable,
+} from '../scene';
 import { useIsDragging } from '../selection';
 import { CENTER_DOT_RADIUS } from '../theme';
-import { clampRotation, mod360 } from '../util';
+import { type Enum, clampRotation, mod360 } from '../util';
 import { distance } from '../vector';
 import {
     CONTROL_POINT_BORDER_COLOR,
-    Handle,
-    HandleFuncProps,
+    type Handle,
+    type HandleFuncProps,
     HandleStyle,
     createControlPointManager,
 } from './ControlPoint';
@@ -51,7 +58,7 @@ export const RadiusObjectContainer: React.FC<RadiusObjectContainerProps> = ({
 }) => {
     const { dispatch, scene } = useScene();
     const showResizer = useShowResizer(object);
-    const [isResizing, setResizing] = useState(false);
+    const [isResizing, setIsResizing] = useState(false);
     const isDragging = useIsDragging(object);
 
     const updateObject = (state: RadiusObjectState) => {
@@ -80,7 +87,7 @@ export const RadiusObjectContainer: React.FC<RadiusObjectContainerProps> = ({
             <DraggableObject object={object}>
                 <RadiusControlPoints
                     object={object}
-                    onActive={setResizing}
+                    onActive={setIsResizing}
                     visible={showResizer && !isDragging}
                     onTransformEnd={updateObject}
                     allowRotate={allowRotate}
@@ -109,11 +116,12 @@ function stateChanged(object: RadiusObject, state: RadiusObjectState) {
     return false;
 }
 
-enum HandleId {
-    Radius,
-    Rotate,
-    InnerRadius,
-}
+const HandleId = {
+    Radius: 0,
+    Rotate: 1,
+    InnerRadius: 2,
+} as const;
+type HandleId = Enum<typeof HandleId>;
 
 const OUTSET = 2;
 const ROTATE_HANDLE_OFFSET = 50;

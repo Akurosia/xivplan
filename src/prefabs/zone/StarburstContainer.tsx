@@ -4,11 +4,16 @@ import { useScene } from '../../SceneProvider';
 import { getAbsoluteRotation, getBaseFacingRotation, getPointerAngle, rotateCoord, snapAngle } from '../../coord';
 import { getResizeCursor } from '../../cursor';
 import { ActivePortal } from '../../render/Portals';
-import { Scene, StarburstZone, UnknownObject } from '../../scene';
+import type { Scene, StarburstZone, UnknownObject } from '../../scene';
 import { useIsDragging } from '../../selection';
-import { clampRotation, mod360 } from '../../util';
+import { clampRotation, mod360, type Enum } from '../../util';
 import { distance } from '../../vector';
-import { CONTROL_POINT_BORDER_COLOR, HandleFuncProps, HandleStyle, createControlPointManager } from '../ControlPoint';
+import {
+    CONTROL_POINT_BORDER_COLOR,
+    HandleStyle,
+    createControlPointManager,
+    type HandleFuncProps,
+} from '../ControlPoint';
 import { DraggableObject } from '../DraggableObject';
 import { MIN_RADIUS } from '../bounds';
 import { useShowResizer } from '../highlight';
@@ -42,7 +47,7 @@ export const StarburstControlContainer: React.FC<StarburstContainerProps> = ({
 }) => {
     const { dispatch, scene } = useScene();
     const showResizer = useShowResizer(object);
-    const [isResizing, setResizing] = useState(false);
+    const [isResizing, setIsResizing] = useState(false);
     const isDragging = useIsDragging(object);
 
     const updateObject = (state: StarburstObjectState) => {
@@ -63,7 +68,7 @@ export const StarburstControlContainer: React.FC<StarburstContainerProps> = ({
             <DraggableObject object={object}>
                 <StarburstControlPoints
                     object={object}
-                    onActive={setResizing}
+                    onActive={setIsResizing}
                     visible={showResizer && !isDragging}
                     onTransformEnd={updateObject}
                     minSpokeWidth={minSpokeWidth}
@@ -91,11 +96,12 @@ function stateChanged(object: StarburstZone, state: StarburstObjectState) {
     return false;
 }
 
-enum HandleId {
-    Radius,
-    Rotate,
-    SpokeWidth,
-}
+const HandleId = {
+    Radius: 0,
+    Rotate: 1,
+    SpokeWidth: 2,
+} as const;
+type HandleId = Enum<typeof HandleId>;
 
 const OUTSET = 2;
 const ROTATE_HANDLE_OFFSET = 50;
