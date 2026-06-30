@@ -1,4 +1,5 @@
 name: CI
+
 on:
   push:
     branches: [main]
@@ -8,24 +9,30 @@ jobs:
   build:
     name: Test
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Set Node.js 22.x
-        uses: actions/setup-node@v3
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 22
+          cache: npm
 
-      - name: Build production bundle
-        run: npm i
+      - name: Install dependencies
+        run: npm ci
         timeout-minutes: 10
 
       - name: Build production bundle
         run: npm run build
         timeout-minutes: 10
 
+      - name: Create CNAME
+        run: echo "xivplan.akurosia.org" > dist/CNAME
+
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
