@@ -1,11 +1,12 @@
 import { Button, mergeClasses } from '@fluentui/react-components';
-import React from 'react';
+import React, { useState } from 'react';
 import { ConnectionType } from '../EditModeContext';
 import { useCurrentStep } from '../SceneProvider';
 import { EditMode } from '../editMode';
 import {
     type SceneObject,
     type UnknownObject,
+    hasLineProperties,
     isArcZone,
     isArrow,
     isColored,
@@ -17,7 +18,6 @@ import {
     isIcon,
     isImageObject,
     isInnerRadiusObject,
-    isLineZone,
     isMarker,
     isMoveable,
     isNamed,
@@ -36,6 +36,7 @@ import { getSelectedObjects, useSelection } from '../selection';
 import { useConnectionSelection } from '../useConnectionSelection';
 import { useControlStyles } from '../useControlStyles';
 import { useEditMode } from '../useEditMode';
+import { PartyTabContext, type PartyTabs } from './PartyTabContext';
 import type { PropertiesControlProps } from './PropertiesControl';
 import { ArrowPointersControl } from './properties/ArrowControls';
 import { DrawObjectBrushControl } from './properties/BrushControl';
@@ -69,10 +70,13 @@ export interface PropertiesPanelProps {
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ className }) => {
     const classes = useControlStyles();
+    const partyTabState = useState<PartyTabs>('roles');
 
     return (
         <div className={mergeClasses(classes.panel, classes.column, className)}>
-            <Controls />
+            <PartyTabContext value={partyTabState}>
+                <Controls />
+            </PartyTabContext>
         </div>
     );
 };
@@ -168,7 +172,7 @@ const Controls: React.FC = () => {
             {/* Position/Size */}
             <ControlCondition objects={objects} test={isMoveable} control={PositionControl} />
             <ControlCondition objects={objects} test={isResizable} control={SizeControl} />
-            <ControlCondition objects={objects} test={isLineZone} control={LineSizeControl} />
+            <ControlCondition objects={objects} test={hasLineProperties} control={LineSizeControl} />
 
             {/* TODO: change this to a two-column grid? */}
             <div className={mergeClasses(classes.row, classes.rightGap)}>

@@ -80,11 +80,11 @@ function didCustomRadialGridChange(grid: CustomRadialGrid, ringsText: string, sp
 
 export const ArenaGridEdit: React.FC = () => {
     const classes = useControlStyles();
-    const { scene, dispatch } = useScene();
-    const grid = scene.arena.grid;
+    const { arena, dispatch } = useScene();
+    const grid = arena.grid;
 
     const setGrid = (grid: Grid, transient = false) => {
-        dispatch({ type: 'arenaGrid', value: grid, transient });
+        dispatch({ type: 'updateArena', value: { grid }, transient });
     };
 
     const commit = () => dispatch({ type: 'commit' });

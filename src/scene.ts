@@ -199,7 +199,7 @@ export interface MarkerObject extends NamedObject, ImageObject, ColoredObject, B
 }
 export const isMarker = makeObjectTest<MarkerObject>(ObjectType.Marker);
 
-export interface ArrowObject extends ResizeableObject, ColoredObject, BaseObject {
+export interface ArrowObject extends LineProps, ColoredObject, BaseObject {
     readonly type: typeof ObjectType.Arrow;
     readonly arrowBegin?: boolean;
     readonly arrowEnd?: boolean;
@@ -290,9 +290,9 @@ export interface LineProps extends MoveableObject, ColoredObject, HollowObject, 
 }
 
 export interface LineZone extends LineProps, BaseObject {
-    readonly type: typeof ObjectType.Line;
+    readonly type: typeof ObjectType.Line | typeof ObjectType.LineStack | typeof ObjectType.LineKnockAway;
 }
-export const isLineZone = makeObjectTest<LineZone>(ObjectType.Line);
+export const isLineZone = makeObjectTest<LineZone>(ObjectType.Line, ObjectType.LineStack, ObjectType.LineKnockAway);
 
 export interface ConeProps extends RadiusObject, ColoredObject, HollowObject, RotateableObject {
     readonly coneAngle: number;
@@ -311,17 +311,13 @@ export const isArcZone = makeObjectTest<ArcZone>(ObjectType.Arc);
 export interface RectangleZone extends ResizeableObject, ColoredObject, HollowObject, BaseObject {
     readonly type:
         | typeof ObjectType.Rect
-        | typeof ObjectType.LineStack
         | typeof ObjectType.LineKnockback
-        | typeof ObjectType.LineKnockAway
         | typeof ObjectType.Triangle
         | typeof ObjectType.RightTriangle;
 }
 export const isRectangleZone = makeObjectTest<RectangleZone>(
     ObjectType.Rect,
-    ObjectType.LineStack,
     ObjectType.LineKnockback,
-    ObjectType.LineKnockAway,
     ObjectType.Triangle,
     ObjectType.RightTriangle,
 );
@@ -374,7 +370,8 @@ export function isZone(object: UnknownObject): object is Zone {
         isRectangleZone(object) ||
         isExaflareZone(object) ||
         isStarburstZone(object) ||
-        isTowerZone(object)
+        isTowerZone(object) ||
+        isPolygonZone(object)
     );
 }
 
@@ -433,6 +430,11 @@ export function isResizable<T>(object: T): object is ResizeableObject & T {
     return obj && typeof obj.width === 'number' && typeof obj.height === 'number';
 }
 
+export function hasLineProperties<T>(object: T): object is LineProps & T {
+    const obj = object as LineProps & T;
+    return obj && typeof obj.width === 'number' && typeof obj.length === 'number';
+}
+
 export function isRadiusObject<T>(object: T): object is RadiusObject & T {
     if (!isMoveable(object)) {
         return false;
@@ -463,6 +465,9 @@ export const supportsHollow = makeObjectTest<HollowObject & UnknownObject>(
     ObjectType.Cone,
     ObjectType.Arc,
     ObjectType.Line,
+    ObjectType.LineStack,
+    ObjectType.LineKnockAway,
+    ObjectType.LineKnockback,
     ObjectType.Rect,
     ObjectType.Triangle,
     ObjectType.RightTriangle,
@@ -480,6 +485,7 @@ export type SceneObjectWithoutId = Omit<SceneObject, 'id'> & { id?: number };
 
 export interface SceneStep {
     readonly objects: readonly SceneObject[];
+    readonly customArena?: Arena;
 }
 
 export interface Scene {

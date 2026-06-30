@@ -11,7 +11,7 @@ import {
 import React, { type ReactNode } from 'react';
 import { useScene } from '../SceneProvider';
 import { EditMode } from '../editMode';
-import { PrefabIcon } from '../prefabs/PrefabIcon';
+import { PrefabIconBase } from '../prefabs/PrefabIcon';
 import type { SceneObject } from '../scene';
 import { useEditMode } from '../useEditMode';
 import { setOrOmit } from '../util';
@@ -30,8 +30,6 @@ export interface DetailsItemProps {
     size?: DetailsItemSize;
 }
 
-// TODO: only show hide button if hidden or hovered/selected
-
 export const DetailsItem: React.FC<DetailsItemProps> = ({
     object,
     icon,
@@ -49,12 +47,13 @@ export const DetailsItem: React.FC<DetailsItemProps> = ({
 
     return (
         <div className={mergeClasses(classes.wrapper, className)}>
-            <div>{icon && <PrefabIcon icon={icon} name={name} width={iconSize} height={iconSize} />}</div>
+            <div>{icon && <PrefabIconBase icon={icon} name={name} width={iconSize} height={iconSize} />}</div>
             {children ? children : <div className={classes.name}>{name}</div>}
             {showControls && (
                 <div className={classes.buttons}>
                     <DetailsItemHideButton
-                        object={object}
+                        objectId={object.id}
+                        isHidden={!!object.hide}
                         className={mergeClasses(isSelected && classes.selectedButton, isDragging && classes.visible)}
                     />
                     {editMode != EditMode.SelectConnection && (
@@ -83,31 +82,33 @@ function getSizeProps(size: DetailsItemSize, classes: ReturnType<typeof useStyle
 }
 
 interface DetailsItemHideButtonProps {
-    object: SceneObject;
+    objectId: number;
+    isHidden: boolean;
     className?: string;
 }
 
 const EyeOffIcon = bundleIcon(EyeOffFilled, EyeOffRegular);
 const EyeIcon = bundleIcon(EyeFilled, EyeRegular);
 
-const DetailsItemHideButton: React.FC<DetailsItemHideButtonProps> = ({ object, className }) => {
+const DetailsItemHideButton: React.FC<DetailsItemHideButtonProps> = ({ objectId, isHidden, className }) => {
     const classes = useStyles();
     const { dispatch } = useScene();
     const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-        dispatch({ type: 'update', value: setOrOmit(object, 'hide', !object.hide) });
+        dispatch({ type: 'transform', ids: objectId, transformFn: (obj) => setOrOmit(obj, 'hide', !isHidden) });
         e.stopPropagation();
     };
 
-    const Icon = object.hide ? EyeOffIcon : EyeIcon;
-    const tooltip = object.hide ? 'Show' : 'Hide';
+    const Icon = isHidden ? EyeOffIcon : EyeIcon;
+    const tooltip = isHidden ? 'Show' : 'Hide';
 
+    // TODO: When trying to activate this button with the keyboard, the parent drag-and-drop wrapper steals the event.
     return (
         <Button
             appearance="transparent"
             className={mergeClasses(
                 detailsItemClassNames.hideButton,
                 classes.hideButton,
-                object.hide && classes.visible,
+                isHidden && classes.visible,
                 className,
             )}
             icon={<Icon />}
@@ -128,6 +129,7 @@ const DetailsItemDeleteButton: React.FC<DetailsItemDeleteButtonProps> = ({ objec
     const { dispatch } = useScene();
     const deleteObject = () => dispatch({ type: 'remove', ids: object.id });
 
+    // TODO: When trying to activate this button with the keyboard, the parent drag-and-drop wrapper steals the event.
     return (
         <Button
             appearance="transparent"

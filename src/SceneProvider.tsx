@@ -11,9 +11,7 @@ import { getAbsolutePosition, getAbsoluteRotation } from './coord';
 import { copyObjects } from './copy';
 import {
     type Arena,
-    ArenaShape,
     DEFAULT_SCENE,
-    type Grid,
     isMoveable,
     isRotateable,
     isTether,
@@ -23,68 +21,36 @@ import {
     type SceneObjectWithoutId,
     type SceneStep,
     type Tether,
-    type Ticks,
 } from './scene';
 import { createUndoContext } from './undo/undoContext';
 import type { StateActionBase, UndoRedoAction } from './undo/undoReducer';
 import { useSetSavedState } from './useIsDirty';
 import { asArray, clamp, omit } from './util';
 
+/**
+ * Overwrites either the shared arena in Scene, or the custom arena in the current SceneStep if there is one.
+ */
 export interface SetArenaAction {
-    type: 'arena';
+    type: 'setArena';
     value: Arena;
 }
 
-export interface SetArenaShapeAction {
-    type: 'arenaShape';
-    value: ArenaShape;
+/**
+ * Mutates either the shared arena in Scene, or the custom arena in the current SceneStep if there is one.
+ */
+export interface UpdateArenaAction {
+    type: 'updateArena';
+    value: Partial<Arena>;
 }
 
-export interface SetArenaWidthAction {
-    type: 'arenaWidth';
-    value: number;
+/** Enables or disables a specific step having a custom arena setting. On enabling, the global arena setting is copied. */
+export interface SetCustomArenaAction {
+    type: 'customArena';
+    stepIndex: number;
+    enable: boolean;
 }
 
-export interface SetArenaHeightAction {
-    type: 'arenaHeight';
-    value: number;
-}
-
-export interface SetArenaPaddingAction {
-    type: 'arenaPadding';
-    value: number;
-}
-
-export interface SetArenaGridAction {
-    type: 'arenaGrid';
-    value: Grid;
-}
-
-export interface SetArenaTicksActions {
-    type: 'arenaTicks';
-    value: Ticks;
-}
-
-export interface SetArenaBackgroundAction {
-    type: 'arenaBackground';
-    value: string | undefined;
-}
-
-export interface SetArenaBackgroundOpacityAction {
-    type: 'arenaBackgroundOpacity';
-    value: number;
-}
-
-export type ArenaAction =
-    | SetArenaAction
-    | SetArenaShapeAction
-    | SetArenaWidthAction
-    | SetArenaHeightAction
-    | SetArenaPaddingAction
-    | SetArenaGridAction
-    | SetArenaTicksActions
-    | SetArenaBackgroundAction
-    | SetArenaBackgroundOpacityAction;
+export type ArenaAction = SetArenaAction | UpdateArenaAction | SetCustomArenaAction;
 
 /**
  * Action which replaces existing objects with the given ones. Objects to replace are matched by ID.
@@ -95,23 +61,14 @@ export interface ObjectUpdateAction {
 }
 
 /**
- * Action which adds properties to and/or removes them from objects with the given IDs.
- *
- * The same change is made to every object. This does not enforce types very strongly.
- * useObjectUpdater() provides a way to send this action with stronger type checks.
+ * Action which applies the given transformation to objects with the given ID(s).
  */
-export interface ObjectUpdatePropsAction {
-    type: 'updateProps';
-    /** IDs of the objects to update */
-    ids: readonly number[];
-    /** Collection of props to set on each object */
-    props?: Readonly<Partial<SceneObject>>;
-    /**
-     * List of keys to delete from each object.
-     * (Ideally this would use "keyof", but we don't know which type(s) of SceneObject(s) are being updated,
-     * so we don't know which keys are valid.)
-     */
-    omit?: readonly string[];
+export interface ObjectTransformAction {
+    type: 'transform';
+    /** The ID(s) of the objects to update */
+    ids: number | readonly number[];
+    /** The transformation to apply to each object */
+    transformFn: (object: SceneObject, scene: Scene) => SceneObject;
 }
 
 export interface ObjectAddAction {
@@ -141,7 +98,7 @@ export type ObjectAction =
     | ObjectMoveAction
     | GroupMoveAction
     | ObjectUpdateAction
-    | ObjectUpdatePropsAction;
+    | ObjectTransformAction;
 
 export interface SetStepAction {
     type: 'setStep';
@@ -236,6 +193,7 @@ export const SceneContext = Context;
 export interface SceneContext {
     scene: Scene;
     step: SceneStep;
+    arena: Arena;
     stepIndex: number;
     source?: FileSource;
     dispatch: React.Dispatch<SceneAction | UndoRedoAction<EditorState>>;
@@ -248,10 +206,12 @@ export function useScene(): SceneContext {
     const [transientPresent, present, dispatch] = usePresent();
     const [source] = use(SourceContext);
 
+    const currentStep = getCurrentStep(transientPresent);
     return {
         scene: transientPresent.scene,
         canonicalScene: present.scene,
-        step: getCurrentStep(transientPresent),
+        step: currentStep,
+        arena: currentStep.customArena ?? transientPresent.scene.arena,
         stepIndex: transientPresent.currentStep,
         source: source,
         dispatch,
@@ -373,9 +333,10 @@ function setStep(state: Readonly<EditorState>, index: number): EditorState {
 }
 
 function addStep(state: Readonly<EditorState>, after: number): EditorState {
-    const { objects, nextId } = copyObjects(state.scene, undefined, getCurrentStep(state).objects);
+    const currentStep = getCurrentStep(state);
+    const { objects, nextId } = copyObjects(state.scene, undefined, currentStep.objects);
 
-    const newStep: SceneStep = { objects };
+    const newStep: SceneStep = { objects, customArena: currentStep.customArena };
 
     const steps = state.scene.steps.slice();
     steps.splice(after + 1, 0, newStep);
@@ -486,7 +447,7 @@ function addObjects(
     return {
         ...state,
         scene: {
-            ...updateStep(state.scene, state.currentStep, { objects: newObjects }),
+            ...updateStep(state.scene, state.currentStep, { ...currentStep, objects: newObjects }),
             nextId,
         },
     };
@@ -544,7 +505,7 @@ function removeObjects(state: Readonly<EditorState>, ids: readonly number[]): Ed
                 : obj,
         );
 
-    return updateCurrentStep(state, { objects });
+    return updateCurrentStep(state, { ...currentStep, objects });
 }
 
 function moveObject(state: Readonly<EditorState>, from: number, to: number): EditorState {
@@ -558,7 +519,7 @@ function moveObject(state: Readonly<EditorState>, from: number, to: number): Edi
     const items = objects.splice(from, 1);
     objects.splice(to, 0, ...items);
 
-    return updateCurrentStep(state, { objects });
+    return updateCurrentStep(state, { ...currentStep, objects });
 }
 
 function mapSelected(step: Readonly<SceneStep>, ids: readonly number[]) {
@@ -638,38 +599,41 @@ function updateObjects(state: Readonly<EditorState>, values: readonly SceneObjec
         }
     }
 
-    return updateCurrentStep(state, { objects });
+    return updateCurrentStep(state, { ...currentStep, objects });
 }
 
-function updateObjectProps(
-    state: Readonly<EditorState>,
-    ids: readonly number[],
-    props?: Readonly<Partial<SceneObject>>,
-    omitProps?: readonly string[],
-) {
-    const currentStep = getCurrentStep(state);
-    const objects = currentStep.objects.map((obj) => {
-        if (!ids.includes(obj.id)) {
-            return obj;
-        }
-
-        const newObject = { ...obj, ...props };
-
-        if (omitProps) {
-            for (const key of omitProps) {
-                delete newObject[key as keyof SceneObject];
-            }
-        }
-
-        return newObject;
-    });
-
-    return updateCurrentStep(state, { objects });
-}
-
-function updateArena(state: Readonly<EditorState>, arena: Arena): EditorState {
+function setArena(state: Readonly<EditorState>, arena: Arena): EditorState {
+    const currentStep = state.scene.steps[state.currentStep];
+    if (currentStep?.customArena !== undefined) {
+        return {
+            scene: updateStep(state.scene, state.currentStep, {
+                ...currentStep,
+                customArena: arena,
+            }),
+            currentStep: state.currentStep,
+        };
+    }
     return {
         scene: { ...state.scene, arena },
+        currentStep: state.currentStep,
+    };
+}
+
+function updateArena(state: Readonly<EditorState>, arena: Partial<Arena>): EditorState {
+    const currentStep = state.scene.steps[state.currentStep];
+    return setArena(state, { ...(currentStep?.customArena ?? state.scene.arena), ...arena });
+}
+
+function setCustomArena(state: Readonly<EditorState>, stepIndex: number, enableCustomArena: boolean): EditorState {
+    const step = state.scene.steps[stepIndex];
+    if (!step) {
+        return state;
+    }
+    const newStepValue: SceneStep = enableCustomArena
+        ? { ...step, customArena: state.scene.arena }
+        : omit(step, 'customArena');
+    return {
+        scene: updateStep(state.scene, stepIndex, newStepValue),
         currentStep: state.currentStep,
     };
 }
@@ -700,32 +664,14 @@ function sceneReducer(state: Readonly<EditorState>, action: SceneAction): Editor
         case 'reoderSteps':
             return reoderSteps(state, action.order);
 
-        case 'arena':
+        case 'setArena':
+            return setArena(state, action.value);
+
+        case 'updateArena':
             return updateArena(state, action.value);
 
-        case 'arenaShape':
-            return updateArena(state, { ...state.scene.arena, shape: action.value });
-
-        case 'arenaWidth':
-            return updateArena(state, { ...state.scene.arena, width: action.value });
-
-        case 'arenaHeight':
-            return updateArena(state, { ...state.scene.arena, height: action.value });
-
-        case 'arenaPadding':
-            return updateArena(state, { ...state.scene.arena, padding: action.value });
-
-        case 'arenaGrid':
-            return updateArena(state, { ...state.scene.arena, grid: action.value });
-
-        case 'arenaTicks':
-            return updateArena(state, { ...state.scene.arena, ticks: action.value });
-
-        case 'arenaBackground':
-            return updateArena(state, { ...state.scene.arena, backgroundImage: action.value });
-
-        case 'arenaBackgroundOpacity':
-            return updateArena(state, { ...state.scene.arena, backgroundOpacity: action.value });
+        case 'customArena':
+            return setCustomArena(state, action.stepIndex, action.enable);
 
         case 'add':
             return addObjects(state, action.object);
@@ -751,8 +697,14 @@ function sceneReducer(state: Readonly<EditorState>, action: SceneAction): Editor
         case 'update':
             return updateObjects(state, asArray(action.value));
 
-        case 'updateProps':
-            return updateObjectProps(state, action.ids, action.props, action.omit);
+        case 'transform':
+            return updateObjects(
+                state,
+                asArray(action.ids)
+                    .map((id) => getObjectById(state.scene, id))
+                    .filter((obj) => obj !== undefined)
+                    .map((obj) => action.transformFn(obj, state.scene)),
+            );
     }
 
     return state;

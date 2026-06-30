@@ -1,7 +1,6 @@
 import {
     Button,
     Checkbox,
-    type CheckboxProps,
     Dialog,
     DialogActions,
     DialogContent,
@@ -17,11 +16,13 @@ import {
     NavItem,
     NavSectionHeader,
     shorthands,
+    Switch,
     tokens,
     typographyStyles,
     useArrowNavigationGroup,
 } from '@fluentui/react-components';
 import { OptionsFilled } from '@fluentui/react-icons';
+import { useAsync, useLocalStorageValue, useMountEffect, useSessionStorageValue } from '@react-hookz/web';
 import React, {
     type ButtonHTMLAttributes,
     type Dispatch,
@@ -30,7 +31,6 @@ import React, {
     useRef,
     useState,
 } from 'react';
-import { useAsync, useCounter, useLocalStorage, useSessionStorage } from 'react-use';
 import { HotkeyBlockingDialogBody } from '../HotkeyBlockingDialogBody';
 import { useScene } from '../SceneProvider';
 import { ARENA_PRESETS } from '../presets/ArenaPresets';
@@ -78,9 +78,28 @@ export const ArenaPanel: React.FC = () => {
             <ArenaGridEdit />
             <ArenaTickEdit />
             <ArenaBackgroundEdit />
+            <CustomArenaToggle />
             <Divider />
             <SelectPresetButton />
         </div>
+    );
+};
+
+const CustomArenaToggle: React.FC = () => {
+    const { scene, stepIndex, dispatch } = useScene();
+    const hasCustomArena = scene.steps[stepIndex]?.customArena !== undefined;
+
+    const toggleCustomArena = () => {
+        dispatch({ type: 'customArena', stepIndex, enable: !hasCustomArena });
+    };
+
+    return (
+        <Switch
+            size="small"
+            label={'Use a custom arena on this step'}
+            onChange={toggleCustomArena}
+            checked={hasCustomArena}
+        />
     );
 };
 
@@ -121,18 +140,20 @@ const PresetsDialogBody: React.FC<PresetsDialogBodyProps> = ({ setOpen }) => {
     const classes = useStyles();
     const { dispatch } = useScene();
 
-    const [counter, { inc: reloadRevealedPresets }] = useCounter();
-    const revealedPresets = useAsync(getRevealedArenaPresets, [counter]);
-    const [revealAll, setRevealAll] = useLocalStorage<CheckboxProps['checked']>('revealArenaPresets', false);
-
-    const [selectedGroup, setSelectedGroup] = useSessionStorage(
-        'arenaPresetGroup',
-        PRESET_CATEGORIES[0]?.groups[0]?.value,
-    );
     const [selectedPreset, setSelectedPreset] = useState<ArenaPreset>();
+    const [revealedPresets, { execute: reloadRevealedPresets }] = useAsync(getRevealedArenaPresets);
+
+    useMountEffect(reloadRevealedPresets);
+
+    const { value: revealAll, set: setRevealAll } = useLocalStorageValue<boolean>('revealArenaPresets', {
+        defaultValue: false,
+    });
+    const { value: selectedGroup, set: setSelectedGroup } = useSessionStorageValue('arenaPresetGroup', {
+        defaultValue: PRESET_CATEGORIES[0]?.groups[0]?.value,
+    });
 
     const applyPreset = (preset: ArenaPreset) => {
-        dispatch({ type: 'arena', value: preset.arena });
+        dispatch({ type: 'setArena', value: preset.arena });
         setOpen(false);
     };
 
@@ -198,7 +219,7 @@ const PresetsDialogBody: React.FC<PresetsDialogBodyProps> = ({ setOpen }) => {
                                 tabIndex={0}
                                 preset={preset}
                                 selected={preset === selectedPreset}
-                                revealedPresets={revealAll ? [key] : revealedPresets.value}
+                                revealedPresets={revealAll ? [key] : revealedPresets.result}
                                 onReveal={() => revealPreset(key)}
                                 onSelect={() => setSelectedPreset(preset)}
                                 onConfirm={() => applyPreset(preset)}
@@ -211,7 +232,7 @@ const PresetsDialogBody: React.FC<PresetsDialogBodyProps> = ({ setOpen }) => {
                 <Checkbox
                     className={classes.revealAll}
                     checked={revealAll}
-                    onChange={(ev, data) => setRevealAll(data.checked)}
+                    onChange={(ev, data) => setRevealAll(!!data.checked)}
                     label="Show all presets"
                 />
                 <Button
@@ -290,6 +311,7 @@ const PresetItem: React.FC<PresetItemProps> = ({
                 <div className={mergeClasses(classes.arenaPreview, isSpoiler && classes.blur)}>
                     <ScenePreview
                         scene={scene}
+                        arena={preset.arena}
                         width={PREVIEW_SIZE}
                         height={PREVIEW_SIZE}
                         backgroundColor="transparent"
@@ -355,11 +377,10 @@ const useStyles = makeStyles({
         padding: `${tokens.spacingVerticalL} ${tokens.spacingHorizontalL}`,
 
         overflowY: 'auto',
-        display: 'flex',
-        flexFlow: 'row wrap',
-        alignItems: 'start',
-        alignContent: 'start',
-        justifyContent: 'start',
+        display: 'grid',
+        gridAutoFlow: 'row',
+        gridTemplateColumns: 'repeat(auto-fit, 240px)',
+        gridAutoRows: 'max-content',
 
         width: '100%',
         gap: '20px',
@@ -371,6 +392,7 @@ const useStyles = makeStyles({
     presetItem: {
         display: 'flex',
         flexFlow: 'column',
+        justifyContent: 'space-between',
 
         margin: 0,
         padding: 0,
